@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#13212b">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <title>Rota em grade FIMI</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <style>
@@ -81,11 +84,11 @@ body.leaflet-dragging #map.leaflet-grab,body.leaflet-dragging #map .leaflet-inte
 </style>
 </head>
 <body>
-<header><b>Rota em grade</b><span>FIMI X8 Tele Max · FIMI Navi 3.0</span></header>
+<header><b>Rota em grade</b><span>FIMI X8 Tele Max · FIMI Navi 3.0</span><span id="net" style="margin-left:auto;display:none;background:#ff5a1f;color:#fff;border-radius:10px;padding:2px 8px;font-size:12px">Offline</span></header>
 
 <div id="mapwrap">
   <div id="map"></div>
-  <div id="nomap" style="position:absolute;inset:0;z-index:400;display:none;align-items:center;justify-content:center;text-align:center;padding:20px;background:#13212b;color:#fff;font-size:15px">O mapa de satélite não carregou. Verifique a internet e abra a página no Chrome.</div>
+  <div id="nomap" style="position:absolute;left:8px;right:8px;top:62px;z-index:450;display:none;text-align:center;padding:8px 12px;background:rgba(19,33,43,.92);color:#fff;font-size:14px;border-radius:10px;pointer-events:none"></div>
   <div id="loupe"><div id="loupeMap"></div><span class="dot"></span></div>
   <button id="bFs" aria-label="Tela cheia" title="Tela cheia"><svg id="icFs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
   <div id="fsInfo"></div>
@@ -96,6 +99,7 @@ body.leaflet-dragging #map.leaflet-grab,body.leaflet-dragging #map .leaflet-inte
     <button id="bUndo">Desfazer</button>
     <button id="bClear">Limpar</button>
     <button id="bGps">Onde estou</button>
+    <button id="bCorner">+ Canto no GPS</button>
   </div>
 </div>
 
@@ -169,6 +173,12 @@ body.leaflet-dragging #map.leaflet-grab,body.leaflet-dragging #map .leaflet-inte
         <p class="note">Cada parte inclui subida, ida, rota, volta e pouso, e cabe no tempo da bateria descontada a reserva.</p>
       </div>
       <div>
+        <h3>Mapa offline</h3>
+        <p class="note" style="margin:0 0 8px">Todo trecho do mapa que você olhar com internet fica salvo no celular e aparece depois sem internet. Antes de ir a campo, abra a ferramenta, vá até a área e dê zoom até o nível que vai usar (se possível em <b>Satélite</b> e <b>Satélite 2</b>).</p>
+        <p id="offInfo" style="margin:0 0 8px;font-weight:600">Calculando…</p>
+        <button class="sec" id="bOffClear">Apagar mapa salvo</button>
+      </div>
+      <div>
         <h3>Google Earth</h3>
         <button class="sec" id="bGE">Baixar KML para Google Earth</button>
       </div>
@@ -179,6 +189,8 @@ body.leaflet-dragging #map.leaflet-grab,body.leaflet-dragging #map .leaflet-inte
     <summary>Como usar no FIMI Navi</summary>
     <div class="dbody"><ol>
       <li>No local do voo, toque em <b>Onde estou</b>: o mapa centraliza e o H fica na sua posição.</li>
+      <li>Sem internet: use o mapa que você salvou antes (veja Opções avançadas → Mapa offline) ou caminhe até cada canto do terreno e toque em <b>+ Canto no GPS</b>.</li>
+      <li>Para abrir sem internet, instale: Chrome → ⋮ → <b>Instalar app</b> (ou Adicionar à tela inicial), com internet pelo menos uma vez.</li>
       <li>Marque os cantos da área, ajuste altura e velocidade e baixe o KML. Se a área precisar de mais de uma bateria, baixe uma parte para cada bateria e voe na ordem.</li>
       <li>No app: Voo inteligente → Ponto de referência → História → <b>Importar rotas</b> → pasta Download. A rota aparece em <b>Favorito</b>.</li>
       <li>Conecte o drone, espere o GPS fixar e abra a rota. Confira os pontos antes de executar.</li>
@@ -331,19 +343,20 @@ if (typeof module!=='undefined') module.exports=Core;
   // poly: cantos da área (modo grade). fixed: pontos importados de um KML do FIMI (modo pontos), ou null.
   var poly=[], fixed=null, home=null, mode='area', vMarks=[], wpLayer=null, polyLayer=null, homeMark=null, last=null, parts=[];
   var map = L.map('map',{zoomControl:true}).setView([-15.78,-47.93],4);
-  var sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?blankTile=false',{maxZoom:21,maxNativeZoom:19,attribution:'Esri'}).addTo(map);
+  var sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?blankTile=false',{maxZoom:21,maxNativeZoom:19,attribution:'Esri',crossOrigin:true}).addTo(map);
   // Onde não há foto no zoom pedido, o servidor responde 404: baixa o zoom nativo e amplia a última foto disponível.
-  var clar = L.tileLayer('https://clarity.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?blankTile=false',{maxZoom:21,maxNativeZoom:19,attribution:'Esri Clarity'});
-  [sat,clar].forEach(function(lay){ var fails={}; lay.on('tileerror',function(e){ var z=e.coords.z; fails[z]=(fails[z]||0)+1;
-    if(fails[z]>=2 && z<=lay.options.maxNativeZoom && z>15){ lay.options.maxNativeZoom=z-1; fails={}; lay.redraw(); } }); });
-  var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:20,maxNativeZoom:19,attribution:'© OpenStreetMap'});
+  var clar = L.tileLayer('https://clarity.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?blankTile=false',{maxZoom:21,maxNativeZoom:19,attribution:'Esri Clarity',crossOrigin:true});
+  [sat,clar].forEach(function(lay){ var probed={}; lay.on('tileerror',function(e){ var z=e.coords.z;
+    if(probed[z] || z>lay.options.maxNativeZoom || z<=15 || !navigator.onLine) return; probed[z]=true;
+    fetch(e.tile.src,{mode:'cors'}).then(function(r){ if(r.status===404 && z<=lay.options.maxNativeZoom){ lay.options.maxNativeZoom=z-1; lay.redraw(); } else probed[z]=false; }, function(){ probed[z]=false; }); }); });
+  var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:20,maxNativeZoom:19,attribution:'© OpenStreetMap',crossOrigin:true});
   L.control.layers({'Satélite (Esri)':sat,'Satélite 2 (Esri Clarity)':clar,'Mapa':osm}).addTo(map);
   var icon = function(cls,html,s){ s=s||24; return L.divIcon({className:'',html:'<div class="'+cls+'">'+(html||'')+'</div>',iconSize:[s,s],iconAnchor:[s/2,s/2]}); };
   // ---- Lupa: mapa ampliado ao lado do dedo, com mira no ponto exato ----
   var loupe=(function(){ var el=$('loupe'), lm=null, base=null, ln=null, on=false, R=75;
     function ensure(){ if(lm) return; lm=L.map('loupeMap',{zoomControl:false,attributionControl:false,dragging:false,touchZoom:false,scrollWheelZoom:false,doubleClickZoom:false,boxZoom:false,keyboard:false,inertia:false,fadeAnimation:false,zoomAnimation:false,markerZoomAnimation:false}); ln=L.layerGroup().addTo(lm); }
     function start(){ ensure(); el.style.display='block'; lm.invalidateSize(false);
-      var src=map.hasLayer(osm)?osm:(map.hasLayer(clar)?clar:sat); if(!base||base._url!==src._url){ if(base) lm.removeLayer(base); base=L.tileLayer(src._url,{maxZoom:22,maxNativeZoom:src.options.maxNativeZoom,subdomains:src.options.subdomains}).addTo(lm); }
+      var src=map.hasLayer(osm)?osm:(map.hasLayer(clar)?clar:sat); if(!base||base._url!==src._url){ if(base) lm.removeLayer(base); base=L.tileLayer(src._url,{maxZoom:22,maxNativeZoom:src.options.maxNativeZoom,subdomains:src.options.subdomains,crossOrigin:true}).addTo(lm); }
       base.options.maxNativeZoom=src.options.maxNativeZoom;
       ln.clearLayers(); var pts=(fixed||poly).map(function(q){return [q.lat,q.lon];});
       if(pts.length>=2) (fixed?L.polyline(pts,{color:'#ff5a1f',weight:2}):L.polygon(pts,{color:'#4fc0cb',weight:2,fill:false})).addTo(ln);
@@ -551,7 +564,35 @@ if (typeof module!=='undefined') module.exports=Core;
   applyCam();
   if(poly.length||fixed) fit(); else locate(!home);
   redraw();
-  var okTile=false; sat.on('tileload',function(){okTile=true;}); setTimeout(function(){ if(!okTile) $('nomap').style.display='flex'; },8000);
+  var okTile=false; [sat,clar,osm].forEach(function(l){ l.on('tileload',function(){ okTile=true; $('nomap').style.display='none'; }); });
+  function netState(){ var off=!navigator.onLine; $('net').style.display=off?'':'none';
+    if(off && !okTile){ $('nomap').textContent='Sem internet e sem mapa salvo aqui. Dá para marcar mesmo assim, ou use + Canto no GPS caminhando até cada canto.'; $('nomap').style.display='block'; } }
+  window.addEventListener('online',netState); window.addEventListener('offline',netState);
+  setTimeout(function(){ if(!okTile){ $('nomap').textContent = navigator.onLine ? 'O mapa de satélite não carregou. Verifique a internet.' : 'Sem internet e sem mapa salvo aqui. Dá para marcar mesmo assim, ou use + Canto no GPS caminhando até cada canto.'; $('nomap').style.display='block'; } },6000);
+  netState();
+  // ---- App offline ----
+  function swMsg(msg){ return new Promise(function(res){ var c=navigator.serviceWorker&&navigator.serviceWorker.controller; if(!c) return res(null); var ch=new MessageChannel(); ch.port1.onmessage=function(e){res(e.data);}; c.postMessage(msg,[ch.port2]); setTimeout(function(){res(null);},3000); }); }
+  function offInfo(){ var el=$('offInfo'); if(!('serviceWorker' in navigator) || !navigator.serviceWorker.controller){ el.textContent = location.protocol==='https:' ? 'Preparando o modo offline… recarregue a página uma vez.' : 'O modo offline funciona no endereço do GitHub (https).'; return; }
+    Promise.all([swMsg('contar'), navigator.storage&&navigator.storage.estimate?navigator.storage.estimate():Promise.resolve(null)]).then(function(r){
+      var n=r[0]&&r[0].tiles||0, mb=r[1]&&r[1].usage?Math.round(r[1].usage/1048576):null;
+      el.textContent = n+' imagens de mapa salvas'+(mb!==null?' · '+mb+' MB usados':'')+(r[1]&&r[1].quota?' de '+Math.round(r[1].quota/1048576)+' MB disponíveis':''); }); }
+  if('serviceWorker' in navigator && (location.protocol==='https:' || location.hostname==='localhost' || location.hostname==='127.0.0.1')){
+    navigator.serviceWorker.register('sw.js').then(function(){ if(navigator.storage&&navigator.storage.persist) navigator.storage.persist().catch(function(){}); }).catch(function(){});
+    navigator.serviceWorker.addEventListener('controllerchange',offInfo);
+  }
+  $('adv').addEventListener('toggle',function(){ if($('adv').open) offInfo(); });
+  $('bOffClear').onclick=function(){ swMsg('apagar').then(function(){ toast('Mapa salvo apagado'); offInfo(); }); };
+  // ---- Canto pela posição do GPS ----
+  $('bCorner').onclick=function(){ if(!navigator.geolocation) return toast('GPS indisponível neste navegador'); toast('Obtendo posição do GPS…');
+    var best=null, done=false, wid=null;
+    function finish(){ if(done) return; done=true; if(wid!==null) navigator.geolocation.clearWatch(wid);
+      if(!best) return toast('Não foi possível obter a posição');
+      var p={lat:best.coords.latitude,lon:best.coords.longitude}, acc=Math.round(best.coords.accuracy);
+      if(fixed) fixed.push(p); else poly.push(p); redraw(); map.setView([p.lat,p.lon],Math.max(map.getZoom(),18));
+      toast((fixed?'Ponto ':'Canto ')+(fixed?fixed.length:poly.length)+' marcado (precisão ±'+acc+' m)'+(acc>10?' – espere o GPS estabilizar e tente de novo':'')); }
+    wid=navigator.geolocation.watchPosition(function(pos){ if(!best||pos.coords.accuracy<best.coords.accuracy) best=pos; if(best.coords.accuracy<=4) finish(); },
+      function(){ finish(); },{enableHighAccuracy:true,maximumAge:0,timeout:20000});
+    setTimeout(finish,8000); };
 }
 </script>
 </body>
