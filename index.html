@@ -106,6 +106,7 @@ body.leaflet-dragging #map.leaflet-grab,body.leaflet-dragging #map .leaflet-inte
       <label>Altura de voo (m)<input id="alt" type="number" min="10" max="120" value="30" inputmode="numeric"></label>
       <label>Velocidade (m/s)<input id="spd" type="number" min="1" max="10" step="0.5" value="3" inputmode="decimal"></label>
       <label class="full">Direções de voo<select id="passes"><option value="1">Uma direção (padrão)</option><option value="2">Cruzada – 2 direções a 90°</option><option value="3">Cruzada + diagonal – 3 direções</option></select></label>
+      <label class="full" id="joinWrap" style="display:none">Sequência<select id="join"><option value="0">Separar por direção</option><option value="1">Rota contínua – todas as direções sem parar</option></select></label>
     </div>
     <div class="stats">
       <div class="stat big"><b id="sBat">0</b><span>baterias</span></div>
@@ -324,7 +325,7 @@ if (typeof module!=='undefined') module.exports=Core;
 {
   if(typeof L==='undefined'){ document.getElementById('nomap').textContent='A biblioteca do mapa não carregou. Verifique a internet e recarregue a página.'; document.getElementById('nomap').style.display='flex'; throw new Error('Leaflet ausente'); }
   var $ = function(id){ return document.getElementById(id); };
-  var FIELDS=['name','alt','spd','passes','photo','side','front','spacing','margin','ang','cam','hfov','vfov','imgw','end','lost','yaw','maptype','bat','reserve'];
+  var FIELDS=['name','alt','spd','passes','join','photo','side','front','spacing','margin','ang','cam','hfov','vfov','imgw','end','lost','yaw','maptype','bat','reserve'];
   var CAMS={telemax:{hfov:68.4,vfov:54,imgw:8064}};
   var MAXD=1000, MIN_INT=2, KEY='fimiGrade3';
   // poly: cantos da área (modo grade). fixed: pontos importados de um KML do FIMI (modo pontos), ou null.
@@ -408,8 +409,13 @@ if (typeof module!=='undefined') module.exports=Core;
     last=r;
     wpLayer = L.layerGroup().addTo(map);
     var usable = o.batMin*60*(1-o.reserve/100);
-    var npass = fixed ? 1 : (+$('passes').value||1), routes=[{wps:r.wps, ang:r.bearing}];
-    if(npass>1 && r.wps.length){ (npass===2?[90]:[90,45]).forEach(function(d){ var rr=Core.build(poly, Object.assign({},o,{bearing:Math.round((r.bearing+d)%180)})); routes.push({wps:rr.wps, ang:rr.bearing}); }); }
+    var npass = fixed ? 1 : (+$('passes').value||1), joined = npass>1 && $('join').value==='1', routes=[{wps:r.wps, ang:r.bearing}];
+    $('joinWrap').style.display = (!fixed && npass>1) ? '' : 'none';
+    if(npass>1 && r.wps.length){ (npass===2?[90]:[90,45]).forEach(function(d){
+      var prev=routes[routes.length-1].wps, start = joined && prev.length ? prev[prev.length-1] : o.home;  // contínua: começa pela ponta mais perto de onde a anterior terminou
+      var rr=Core.build(poly, Object.assign({},o,{bearing:Math.round((r.bearing+d)%180), home:start})); routes.push({wps:rr.wps, ang:rr.bearing}); }); }
+    var angles = routes.map(function(rt){return rt.ang;});
+    if(joined){ var all=[]; routes.forEach(function(rt){ rt.wps.forEach(function(q){ if(!all.length || Core.hav(all[all.length-1],q)>=10) all.push(q); }); }); routes=[{wps:all, ang:null}]; }
     parts=[]; routes.forEach(function(rt,pi){ if(rt.wps.length<2) return; var sp=Core.splitBalanced(rt.wps, home, o, usable); sp.forEach(function(seg){ parts.push({wps:seg, pass:pi, ang:rt.ang}); }); });
     var colors=['#ff5a1f','#ffd21f','#3ad1ff','#c56bff','#5be37a','#ff7ab6'];
     parts.forEach(function(p,i){ L.polyline(p.wps.map(function(q){return [q.lat,q.lon];}),{color:colors[i%colors.length],weight:3,opacity:p.pass?0.8:1,dashArray:p.pass?'8 5':null}).addTo(wpLayer); });
@@ -424,20 +430,20 @@ if (typeof module!=='undefined') module.exports=Core;
       tips += o.photo==='wp' ? 'foto em cada ponto' : 'foto por intervalo a cada <b>'+Math.max(0.5,Math.floor(r.interval*2)/2)+' s</b> (gimbal em −90°)';
       if(o.photo==='interval' && r.interval<MIN_INT) w.push('Intervalo de foto abaixo de '+MIN_INT+' s. Reduza a velocidade para '+Math.floor(r.photoDist/MIN_INT*2)/2+' m/s ou suba a altura.');
     }
-    if(npass>1 && parts.length) tips += '<br>Direções: '+routes.map(function(rt,i){return (i+1)+'ª '+Math.round(rt.ang)+'°';}).join(' · ')+' (tracejado = direções extras).';
+    if(npass>1 && parts.length) tips += '<br>Direções: '+angles.map(function(a,i){return (i+1)+'ª '+Math.round(a)+'°';}).join(' · ')+(joined?' em sequência, numa rota contínua.':' (tracejado = direções extras).');
     if(parts.length) tips += (tips?'<br>':'')+'Cada bateria: até '+fmtMin(usable)+' de voo ('+o.reserve+'% de reserva sobre '+o.batMin+' min).';
     $('tips').innerHTML = tips;
     $('modeNote').textContent = fixed ? 'Editando pontos de um KML do FIMI: arraste, toque num ponto para excluir ou toque no mapa para adicionar no fim.' : '';
     $('warns').innerHTML = w.map(function(t){return '<li>'+t.replace(/</g,'&lt;')+'</li>';}).join('');
     var n=parts.length;
     $('parts').innerHTML = !n ? '<button class="pri" disabled>'+(fixed?'Adicione pelo menos 2 pontos':'Marque pelo menos 3 cantos no mapa')+'</button>' :
-      parts.map(function(p,i){ return '<button class="pri" data-part="'+i+'"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:8px;border:2px solid #fff;vertical-align:-1px;background:'+colors[i%colors.length]+'"></span>'+(n>1?'Bateria '+(i+1)+' de '+n+(npass>1?' · direção '+(p.pass+1):'')+' · ':'Baixar KML para o FIMI · ')+fmtMin(Core.missionTime(p.wps,home,o))+'</button>'; }).join('');
+      parts.map(function(p,i){ return '<button class="pri" data-part="'+i+'"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:8px;border:2px solid #fff;vertical-align:-1px;background:'+colors[i%colors.length]+'"></span>'+(n>1?'Bateria '+(i+1)+' de '+n+(npass>1&&!joined?' · direção '+(p.pass+1):'')+' · ':'Baixar KML para o FIMI · ')+fmtMin(Core.missionTime(p.wps,home,o))+'</button>'; }).join('');
     $('fsInfo').innerHTML = (parts.length ? '<b>'+parts.length+(parts.length>1?' baterias':' bateria')+' · '+fmtMin(total)+' · '+totPts+' pontos</b><br>' : '')+$('hint').textContent;
     $('nameHint').textContent = !n ? '' : (n>1 ? 'Arquivos: '+fname()+partSuffix(0)+'.kml … '+partSuffix(n-1)+'.kml' : 'Arquivo: '+fname()+'.kml');
     save();
   }
   // Nome do arquivo = projeto + data/hora. A data é fixada no 1º download e vale para todas as partes da mesma rota.
-  function partSuffix(i){ var n=parts.length, p=parts[i]; if(n<2) return ''; return (+$('passes').value>1 && !fixed ? '_d'+(p.pass+1) : '')+'_bat'+(i+1)+'de'+n; }
+  function partSuffix(i){ var n=parts.length, p=parts[i]; if(n<2) return ''; return (+$('passes').value>1 && !fixed && $('join').value!=='1' ? '_d'+(p.pass+1) : '')+'_bat'+(i+1)+'de'+n; }
   function fname(){ var sig=JSON.stringify([poly,fixed,home,fieldVals()]); if(!stamp||sig!==stampSig){ stamp=stampNow(); stampSig=sig; }
     var b=baseName($('name').value).replace(/[^\w\-]+/g,'_').replace(/^_+|_+$/g,'').slice(0,30)||'Area'; return b+'_'+stamp; }
   function download(name, text){
