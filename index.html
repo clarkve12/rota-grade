@@ -81,7 +81,7 @@ ol{padding-left:20px;margin:0}ol li{margin-bottom:6px}
 <main>
   <section class="card">
     <div class="grid">
-      <label class="full">Nome da rota<input id="name" autocomplete="off"></label>
+      <label class="full">Nome do projeto<input id="name" autocomplete="off" placeholder="Ex.: Fazenda_Sul"><span class="note" id="nameHint" style="margin:0"></span></label>
       <label>Altura de voo (m)<input id="alt" type="number" min="10" max="120" value="30" inputmode="numeric"></label>
       <label>Velocidade (m/s)<input id="spd" type="number" min="1" max="10" step="0.5" value="3" inputmode="decimal"></label>
     </div>
@@ -312,7 +312,10 @@ if (typeof module!=='undefined') module.exports=Core;
   L.control.layers({'Satélite':sat,'Mapa':osm}).addTo(map);
   var icon = function(cls,html,s){ s=s||24; return L.divIcon({className:'',html:'<div class="'+cls+'">'+(html||'')+'</div>',iconSize:[s,s],iconAnchor:[s/2,s/2]}); };
   function toast(t){ var e=$('toast'); e.textContent=t; e.style.display='block'; clearTimeout(e._t); e._t=setTimeout(function(){e.style.display='none';},3500); }
-  function autoName(){ var d=new Date(),p=function(n){return (n<10?'0':'')+n;}; return 'Area_'+p(d.getDate())+p(d.getMonth()+1)+'_'+p(d.getHours())+p(d.getMinutes()); }
+  var STAMP_RE=/_(\d{4}_\d{4}|\d{2}-\d{2}_\d{2}h\d{2})$/;
+  function stampNow(){ var d=new Date(),p=function(n){return (n<10?'0':'')+n;}; return p(d.getDate())+'-'+p(d.getMonth()+1)+'_'+p(d.getHours())+'h'+p(d.getMinutes()); }
+  function baseName(v){ return String(v||'').trim().replace(/\.kml$/i,'').replace(/_GoogleEarth$/,'').replace(/_bat\d+de\d+$/,'').replace(STAMP_RE,''); }
+  var stamp=null, stampSig='';
   function fmtMin(s){ return Math.ceil(s/60)+' min'; }
   function setMode(m){ mode=m; $('bArea').classList.toggle('on',m==='area'); $('bHome').classList.toggle('on',m==='home');
     $('bArea').textContent = fixed ? 'Pontos' : 'Área';
@@ -329,6 +332,7 @@ if (typeof module!=='undefined') module.exports=Core;
   function load(st, keepSpeedAlt){
     poly=st.poly||[]; fixed=st.fixed||null; home=st.home||null;
     Object.keys(st.f||{}).forEach(function(k){ if($(k) && !(keepSpeedAlt && (k==='alt'||k==='spd'))) $(k).value=st.f[k]; });
+    $('name').value=baseName($('name').value);
     applyCam(); setMode('area');
   }
   function fit(){ var pts=(fixed||poly).concat(home?[home]:[]); if(pts.length) map.fitBounds(L.latLngBounds(pts.map(function(q){return [q.lat,q.lon];})),{padding:[30,30],maxZoom:18}); }
@@ -380,9 +384,12 @@ if (typeof module!=='undefined') module.exports=Core;
     var n=parts.length;
     $('parts').innerHTML = !n ? '<button class="pri" disabled>'+(fixed?'Adicione pelo menos 2 pontos':'Marque pelo menos 3 cantos no mapa')+'</button>' :
       parts.map(function(p,i){ return '<button class="pri" data-part="'+i+'"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:8px;border:2px solid #fff;vertical-align:-1px;background:'+colors[i%colors.length]+'"></span>'+(n>1?'Bateria '+(i+1)+' de '+n+' · ':'Baixar KML para o FIMI · ')+fmtMin(Core.missionTime(p,home,o))+'</button>'; }).join('');
+    $('nameHint').textContent = !n ? '' : (n>1 ? 'Arquivos: '+fname()+'_bat1de'+n+'.kml … _bat'+n+'de'+n+'.kml' : 'Arquivo: '+fname()+'.kml');
     save();
   }
-  function fname(){ if(!$('name').value.trim()) $('name').value=autoName(); return $('name').value.trim().replace(/[^\w\-]+/g,'_').slice(0,40); }
+  // Nome do arquivo = projeto + data/hora. A data é fixada no 1º download e vale para todas as partes da mesma rota.
+  function fname(){ var sig=JSON.stringify([poly,fixed,home,fieldVals()]); if(!stamp||sig!==stampSig){ stamp=stampNow(); stampSig=sig; }
+    var b=baseName($('name').value).replace(/[^\w\-]+/g,'_').replace(/^_+|_+$/g,'').slice(0,30)||'Area'; return b+'_'+stamp; }
   function download(name, text){
     var blob=new Blob([text],{type:'application/vnd.google-earth.kml+xml'}), a=document.createElement('a');
     a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click();
@@ -422,7 +429,7 @@ if (typeof module!=='undefined') module.exports=Core;
       choice.then(function(asArea){
         var p2=pts.map(function(p){return {lat:p.lat,lon:p.lon};});
         if(asArea){ fixed=null; poly=hull(p2); } else { fixed=p2; poly=[]; }
-        $('name').value=(fileName||'Rota').replace(/\.kml$/i,'').replace(/_GoogleEarth$/,'')+'_editado';
+        $('name').value=baseName(fileName||'Rota');
         redraw(); fit(); });
       return;
     }
@@ -447,7 +454,7 @@ if (typeof module!=='undefined') module.exports=Core;
     if(mode==='home'){ home=p; setMode('area'); } else if(fixed){ fixed.push(p); } else { poly.push(p); } redraw(); });
   $('bArea').onclick=function(){setMode('area');}; $('bHome').onclick=function(){setMode('home');};
   $('bUndo').onclick=function(){ (fixed||poly).pop(); redraw(); };
-  $('bClear').onclick=function(){ poly=[]; fixed=null; $('name').value=autoName(); redraw(); };
+  $('bClear').onclick=function(){ poly=[]; fixed=null; redraw(); };
   $('bGps').onclick=function(){ locate(true); };
   $('bOpen').onclick=function(){ $('fileIn').value=''; $('fileIn').click(); };
   $('cam').onchange=function(){ applyCam(); compute(); };
@@ -457,7 +464,7 @@ if (typeof module!=='undefined') module.exports=Core;
   var saved=null; try{ saved=JSON.parse(localStorage.getItem(KEY)||'null'); }catch(e){}
   if(saved) load(saved,false);
   else { var old=null; try{ old=JSON.parse(localStorage.getItem('fimiGrade2')||'null'); }catch(e){} if(old) load(old,true); }
-  if(!$('name').value) $('name').value=autoName();
+  $('name').value=baseName($('name').value);
   applyCam();
   if(poly.length||fixed) fit(); else locate(!home);
   redraw();
