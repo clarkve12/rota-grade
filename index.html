@@ -65,6 +65,13 @@ ol{padding-left:20px;margin:0}ol li{margin-bottom:6px}
 #loupe::before{width:2px;height:34px;margin:-17px 0 0 -1px}
 #loupe::after{width:34px;height:2px;margin:-1px 0 0 -17px}
 #loupe .dot{position:absolute;z-index:701;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:#fff;border:1px solid #ff5a1f}
+#bFs{position:absolute;z-index:500;top:60px;right:10px;width:46px;height:46px;min-height:0;padding:0;display:flex;align-items:center;justify-content:center;border-radius:8px;box-shadow:0 1px 5px rgba(0,0,0,.4)}
+#bFs svg{width:24px;height:24px}
+#fsInfo{display:none}
+body.fs header,body.fs main{display:none}
+body.fs #mapwrap{position:fixed;inset:0;height:100vh;height:100dvh;min-height:0;z-index:900}
+body.fs .hint{display:none}
+body.fs #fsInfo{display:block;position:absolute;z-index:500;top:8px;left:56px;right:66px;text-align:center;background:rgba(19,33,43,.88);color:#fff;padding:5px 10px;border-radius:14px;font-size:13px;pointer-events:none}
 #toast{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);background:#13212b;color:#fff;padding:10px 16px;border-radius:10px;display:none;z-index:1000;max-width:90vw}
 </style>
 </head>
@@ -75,6 +82,8 @@ ol{padding-left:20px;margin:0}ol li{margin-bottom:6px}
   <div id="map"></div>
   <div id="nomap" style="position:absolute;inset:0;z-index:400;display:none;align-items:center;justify-content:center;text-align:center;padding:20px;background:#13212b;color:#fff;font-size:15px">O mapa de satélite não carregou. Verifique a internet e abra a página no Chrome.</div>
   <div id="loupe"><div id="loupeMap"></div><span class="dot"></span></div>
+  <button id="bFs" aria-label="Tela cheia" title="Tela cheia"><svg id="icFs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  <div id="fsInfo"></div>
   <div class="hint" id="hint">Toque no mapa para marcar os cantos da área</div>
   <div class="tools">
     <button id="bArea" class="on">Área</button>
@@ -349,7 +358,8 @@ if (typeof module!=='undefined') module.exports=Core;
   function fmtMin(s){ return Math.ceil(s/60)+' min'; }
   function setMode(m){ mode=m; $('bArea').classList.toggle('on',m==='area'); $('bHome').classList.toggle('on',m==='home');
     $('bArea').textContent = fixed ? 'Pontos' : 'Área';
-    $('hint').textContent = m==='home' ? 'Toque onde o drone vai decolar · segure para a lupa' : (fixed ? 'Toque para adicionar ponto · segure para usar a lupa' : 'Toque para marcar um canto · segure para usar a lupa'); }
+    $('hint').textContent = m==='home' ? 'Toque onde o drone vai decolar · segure para a lupa' : (fixed ? 'Toque para adicionar ponto · segure para usar a lupa' : 'Toque para marcar um canto · segure para usar a lupa'); syncFsInfo(); }
+  function syncFsInfo(){ var f=$('fsInfo'); if(!f) return; var b=f.querySelector('b'); f.innerHTML=(b?b.outerHTML+'<br>':'')+$('hint').textContent; }
   function applyCam(){ var c=CAMS[$('cam').value]; ['hfov','vfov','imgw'].forEach(function(k){ $(k).disabled=!!c; if(c) $(k).value=c[k]; }); }
   function opts(){ var n=function(id){return parseFloat($(id).value);};
     return { alt:Math.min(120,Math.max(10,n('alt')||30)), speed:Math.min(10,Math.max(1,n('spd')||3)), hfov:n('hfov')||68.4, vfov:n('vfov')||54, imgw:n('imgw')||8064,
@@ -417,6 +427,7 @@ if (typeof module!=='undefined') module.exports=Core;
     var n=parts.length;
     $('parts').innerHTML = !n ? '<button class="pri" disabled>'+(fixed?'Adicione pelo menos 2 pontos':'Marque pelo menos 3 cantos no mapa')+'</button>' :
       parts.map(function(p,i){ return '<button class="pri" data-part="'+i+'"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:8px;border:2px solid #fff;vertical-align:-1px;background:'+colors[i%colors.length]+'"></span>'+(n>1?'Bateria '+(i+1)+' de '+n+(npass>1?' · direção '+(p.pass+1):'')+' · ':'Baixar KML para o FIMI · ')+fmtMin(Core.missionTime(p.wps,home,o))+'</button>'; }).join('');
+    $('fsInfo').innerHTML = (parts.length ? '<b>'+parts.length+(parts.length>1?' baterias':' bateria')+' · '+fmtMin(total)+' · '+totPts+' pontos</b><br>' : '')+$('hint').textContent;
     $('nameHint').textContent = !n ? '' : (n>1 ? 'Arquivos: '+fname()+partSuffix(0)+'.kml … '+partSuffix(n-1)+'.kml' : 'Arquivo: '+fname()+'.kml');
     save();
   }
@@ -492,7 +503,7 @@ if (typeof module!=='undefined') module.exports=Core;
     function llAt(e){ var r=cont.getBoundingClientRect(); return map.containerPointToLatLng(L.point(e.clientX-r.left,e.clientY-r.top)); }
     function cancel(){ clearTimeout(lp.timer); lp.timer=null; if(lp.active){ lp.active=false; loupe.stop(); map.dragging.enable(); } }
     cont.addEventListener('pointerdown',function(e){ lp.ptrs++; if(lp.ptrs>1){ cancel(); return; }
-      if(e.target.closest('.leaflet-marker-icon,.leaflet-control,.tools,#nomap')) return;
+      if(e.target.closest('.leaflet-marker-icon,.leaflet-control,.tools,#nomap,#bFs')) return;
       lp.x=e.clientX; lp.y=e.clientY; var ev=e;
       lp.timer=setTimeout(function(){ lp.timer=null; lp.active=true; map.dragging.disable(); if(navigator.vibrate) try{navigator.vibrate(15);}catch(_){} loupe.move(llAt(ev)); },450); });
     window.addEventListener('pointermove',function(e){
@@ -507,6 +518,16 @@ if (typeof module!=='undefined') module.exports=Core;
   $('bUndo').onclick=function(){ (fixed||poly).pop(); redraw(); };
   $('bClear').onclick=function(){ poly=[]; fixed=null; redraw(); };
   $('bGps').onclick=function(){ locate(true); };
+  // ---- Tela cheia ----
+  var IC_IN='<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>', IC_OUT='<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>';
+  function setFs(on){ document.body.classList.toggle('fs',on); $('icFs').innerHTML=on?IC_OUT:IC_IN; $('bFs').setAttribute('aria-label',on?'Sair da tela cheia':'Tela cheia');
+    try{ var de=document.documentElement;
+      if(on && !document.fullscreenElement && de.requestFullscreen){ var pr=de.requestFullscreen({navigationUI:'hide'}); if(pr&&pr.catch) pr.catch(function(){}); }
+      if(!on && document.fullscreenElement && document.exitFullscreen){ var px=document.exitFullscreen(); if(px&&px.catch) px.catch(function(){}); } }catch(e){}
+    setTimeout(function(){ map.invalidateSize(); },250); }
+  $('bFs').onclick=function(e){ e.stopPropagation(); setFs(!document.body.classList.contains('fs')); };
+  document.addEventListener('fullscreenchange',function(){ if(!document.fullscreenElement && document.body.classList.contains('fs')) setFs(false); setTimeout(function(){ map.invalidateSize(); },250); });
+  L.DomEvent.disableClickPropagation($('bFs'));
   $('bOpen').onclick=function(){ $('fileIn').value=''; $('fileIn').click(); };
   $('cam').onchange=function(){ applyCam(); compute(); };
   $('fileIn').onchange=function(e){ var f=e.target.files[0]; if(!f) return; f.text().then(function(t){ importKml(t,f.name); }); };
