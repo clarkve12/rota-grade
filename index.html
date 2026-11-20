@@ -82,18 +82,21 @@ ol{padding-left:20px;margin:0}ol li{margin-bottom:6px}
   <section class="card">
     <div class="grid">
       <label class="full">Nome da rota<input id="name" autocomplete="off"></label>
-      <label>Altura de voo (m)<input id="alt" type="number" min="10" max="120" value="60" inputmode="numeric"></label>
-      <label>Velocidade (m/s)<input id="spd" type="number" min="1" max="10" step="0.5" value="5" inputmode="decimal"></label>
+      <label>Altura de voo (m)<input id="alt" type="number" min="10" max="120" value="30" inputmode="numeric"></label>
+      <label>Velocidade (m/s)<input id="spd" type="number" min="1" max="10" step="0.5" value="3" inputmode="decimal"></label>
     </div>
     <div class="stats">
-      <div class="stat big"><b id="sPts">0</b><span>pontos / 99</span></div>
-      <div class="stat"><b id="sDist">0 m</b><span>percurso</span></div>
-      <div class="stat"><b id="sTime">0 min</b><span>tempo</span></div>
+      <div class="stat big"><b id="sBat">0</b><span>baterias</span></div>
+      <div class="stat"><b id="sTime">0 min</b><span>tempo total</span></div>
       <div class="stat"><b id="sArea">0 ha</b><span>área</span></div>
+      <div class="stat"><b id="sPts">0</b><span>pontos</span></div>
     </div>
     <p id="tips"></p>
     <ul id="warns"></ul>
     <div id="parts"></div>
+    <button class="sec" id="bOpen" style="margin-top:8px">Abrir KML para editar</button>
+    <input id="fileIn" type="file" accept=".kml,application/vnd.google-earth.kml+xml,text/xml,application/xml" hidden>
+    <p class="note" id="modeNote"></p>
   </section>
 
   <details id="adv">
@@ -135,9 +138,16 @@ ol{padding-left:20px;margin:0}ol li{margin-bottom:6px}
         </div>
       </div>
       <div>
-        <h3>Área por arquivo</h3>
-        <label>Importar polígono (.kml)<input id="fileIn" type="file" accept=".kml,application/vnd.google-earth.kml+xml,text/xml"></label>
-        <button class="sec" id="bGE" style="margin-top:10px">Baixar KML para Google Earth</button>
+        <h3>Bateria</h3>
+        <div class="grid">
+          <label class="full">Tipo<select id="bat"><option value="29">Inteligente padrão 4650 mAh (≈29 min pairando)</option><option value="36">Inteligente Plus 5000 mAh (≈36 min pairando, estimado)</option></select></label>
+          <label class="full">Reserva de segurança (%)<input id="reserve" type="number" min="10" max="60" value="30" inputmode="numeric"></label>
+        </div>
+        <p class="note">Cada parte inclui subida, ida, rota, volta e pouso, e cabe no tempo da bateria descontada a reserva.</p>
+      </div>
+      <div>
+        <h3>Google Earth</h3>
+        <button class="sec" id="bGE">Baixar KML para Google Earth</button>
       </div>
     </div>
   </details>
@@ -146,10 +156,11 @@ ol{padding-left:20px;margin:0}ol li{margin-bottom:6px}
     <summary>Como usar no FIMI Navi</summary>
     <div class="dbody"><ol>
       <li>No local do voo, toque em <b>Onde estou</b>: o mapa centraliza e o H fica na sua posição.</li>
-      <li>Marque os cantos da área, ajuste altura e velocidade e toque em <b>Baixar KML para o FIMI</b>.</li>
+      <li>Marque os cantos da área, ajuste altura e velocidade e baixe o KML. Se a área precisar de mais de uma bateria, baixe uma parte para cada bateria e voe na ordem.</li>
       <li>No app: Voo inteligente → Ponto de referência → História → <b>Importar rotas</b> → pasta Download. A rota aparece em <b>Favorito</b>.</li>
       <li>Conecte o drone, espere o GPS fixar e abra a rota. Confira os pontos antes de executar.</li>
       <li>No modo intervalo: gimbal em −90° e foto por intervalo com o tempo indicado.</li>
+      <li>Para editar depois, toque em <b>Abrir KML para editar</b> e escolha um KML gerado aqui: área e ajustes voltam como estavam.</li>
     </ol></div>
   </details>
 </main>
@@ -217,10 +228,43 @@ var Core = (function(){
     return out;
   }
 
+
+  // Tempo de uma missão (s): subida, ida até o 1º ponto, percurso, curvas, volta e descida.
+  function missionTime(wps, home, o){
+    if(!wps.length) return 0;
+    var t = o.alt/3 + o.alt/3, len=0;
+    for(var i=1;i<wps.length;i++) len+=hav(wps[i-1],wps[i]);
+    t += len/o.speed + wps.length*3;
+    if(home){ t += hav(home,wps[0])/o.speed + hav(wps[wps.length-1],home)/o.speed; }
+    return t;
+  }
+  // Divide a rota em partes que cabem numa bateria e em 99 pontos. Cada parte recomeça no último ponto da anterior.
+  function split(wps, home, o, usable){
+    var parts=[], start=0;
+    while(start < wps.length-1 || (start===0 && wps.length)){
+      var end=start+1;
+      while(end < wps.length && end-start+1 <= 99 && missionTime(wps.slice(start,end+1),home,o) <= usable) end++;
+      end = Math.max(start+1, end-1);
+      if(end >= wps.length-1 || end-start+1>=2) {}
+      var seg = wps.slice(start, Math.min(end, wps.length-1)+1);
+      parts.push(seg);
+      if(end >= wps.length-1) break;
+      start = end;
+    }
+    return parts;
+  }
+
+  // Mesmo número de partes, mas com durações equilibradas.
+  function splitBalanced(wps, home, o, usable){
+    var base=split(wps,home,o,usable), n=base.length; if(n<=1) return base;
+    var lo=0, hi=usable;
+    for(var k=0;k<25;k++){ var mid=(lo+hi)/2, s=split(wps,home,o,mid); if(s.length<=n) hi=mid; else lo=mid; }
+    var best=split(wps,home,o,hi); return best.length===n ? best : base;
+  }
   function esc(s){ return String(s).replace(/[<>&"']/g,function(c){return {'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c];}); }
   // Formato lido pelo importador do FIMI Navi (z7.b): cada campo do ponto em um <Point> próprio,
   // com o atributo de mesmo nome e o valor no elemento filho.
-  function fimiKml(name, wps, o, dist){
+  function fimiKml(name, wps, o, dist, meta){
     var f=[], add=function(k,v){ f.push('<Point '+k+'="'+k+'"><'+k+'>'+v+'</'+k+'></Point>'); };
     var pms = wps.map(function(p,i){ f=[];
       add('number',i); add('totalnumber',wps.length); add('longitude',p.lon.toFixed(8)); add('latitude',p.lat.toFixed(8));
@@ -229,7 +273,7 @@ var Core = (function(){
       add('longitudePOI','0.0'); add('latitudePOI','0.0'); add('altitudePOI',0); add('pointActionCmd',o.photo==='wp'?4:0); add('roration',0);
       return '<Placemark><Snippet></Snippet><styleUrl>#IconStyle00</styleUrl>'+f.join('')+'</Placemark>'; });
     var info='<PointInfo><time>'+Date.now()+'</time><name>'+esc(name)+'</name><type>'+o.yaw+'</type><speed>'+Math.round(o.speed*10)+'</speed><saveFlag>1</saveFlag><distance>'+dist.toFixed(1)+'</distance><isCurve>0</isCurve><mapType>'+o.maptype+'</mapType><runByMapOrVedio>0</runByMapOrVedio><disconnectType>'+o.lost+'</disconnectType><excuteEnd>'+o.end+'</excuteEnd><autoRecord>0</autoRecord><locality></locality><breakpoint>0</breakpoint></PointInfo>';
-    return '<?xml version="1.0" encoding="utf-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2"><Document><name>'+esc(name)+'.kml</name><Snippet></Snippet><Folder id="FeatureLayer0"><name>'+esc(name)+'.kml</name><Snippet></Snippet>'+info+pms.join('')+'</Folder><Style id="IconStyle00"><IconStyle><Icon><href>layer0_symbol.png</href></Icon><scale>0.250000</scale></IconStyle></Style></Document></kml>\n';
+    return '<?xml version="1.0" encoding="utf-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2"><Document><name>'+esc(name)+'.kml</name><Snippet></Snippet>'+(meta?'<ExtendedData><Data name="rotaGrade"><value>'+esc(meta)+'</value></Data></ExtendedData>':'')+'<Folder id="FeatureLayer0"><name>'+esc(name)+'.kml</name><Snippet></Snippet>'+info+pms.join('')+'</Folder><Style id="IconStyle00"><IconStyle><Icon><href>layer0_symbol.png</href></Icon><scale>0.250000</scale></IconStyle></Style></Document></kml>\n';
   }
   function stdKml(name, poly, wps, home, alt){
     var c=function(p,h){return p.lon.toFixed(8)+','+p.lat.toFixed(8)+','+(h||0);};
@@ -249,7 +293,7 @@ var Core = (function(){
     if(pts.length>1 && pts[0].lat===pts[pts.length-1].lat && pts[0].lon===pts[pts.length-1].lon) pts.pop();
     return pts.length>=3 ? pts : null;
   }
-  return { build:build, fimiKml:fimiKml, stdKml:stdKml, parsePoly:parsePoly, hav:hav };
+  return { build:build, missionTime:missionTime, split:split, splitBalanced:splitBalanced, fimiKml:fimiKml, stdKml:stdKml, parsePoly:parsePoly, hav:hav };
 })();
 if (typeof module!=='undefined') module.exports=Core;
 </script>
@@ -257,61 +301,85 @@ if (typeof module!=='undefined') module.exports=Core;
 {
   if(typeof L==='undefined'){ document.getElementById('nomap').textContent='A biblioteca do mapa não carregou. Verifique a internet e recarregue a página.'; document.getElementById('nomap').style.display='flex'; throw new Error('Leaflet ausente'); }
   var $ = function(id){ return document.getElementById(id); };
-  var FIELDS=['name','alt','spd','photo','side','front','spacing','margin','ang','cam','hfov','vfov','imgw','end','lost','yaw','maptype'];
+  var FIELDS=['name','alt','spd','photo','side','front','spacing','margin','ang','cam','hfov','vfov','imgw','end','lost','yaw','maptype','bat','reserve'];
   var CAMS={telemax:{hfov:68.4,vfov:54,imgw:8064}};
-  var MAXD=1000, MIN_INT=2;
-  var poly=[], home=null, mode='area', vMarks=[], wpLayer=null, polyLayer=null, homeMark=null, last=null;
+  var MAXD=1000, MIN_INT=2, KEY='fimiGrade3';
+  // poly: cantos da área (modo grade). fixed: pontos importados de um KML do FIMI (modo pontos), ou null.
+  var poly=[], fixed=null, home=null, mode='area', vMarks=[], wpLayer=null, polyLayer=null, homeMark=null, last=null, parts=[];
   var map = L.map('map',{zoomControl:true}).setView([-15.78,-47.93],4);
   var sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:20,maxNativeZoom:19,attribution:'Esri'}).addTo(map);
   var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:20,maxNativeZoom:19,attribution:'© OpenStreetMap'});
   L.control.layers({'Satélite':sat,'Mapa':osm}).addTo(map);
-  var icon = function(cls,html){ return L.divIcon({className:'',html:'<div class="'+cls+'">'+(html||'')+'</div>',iconSize:[24,24],iconAnchor:[12,12]}); };
+  var icon = function(cls,html,s){ s=s||24; return L.divIcon({className:'',html:'<div class="'+cls+'">'+(html||'')+'</div>',iconSize:[s,s],iconAnchor:[s/2,s/2]}); };
   function toast(t){ var e=$('toast'); e.textContent=t; e.style.display='block'; clearTimeout(e._t); e._t=setTimeout(function(){e.style.display='none';},3500); }
   function autoName(){ var d=new Date(),p=function(n){return (n<10?'0':'')+n;}; return 'Area_'+p(d.getDate())+p(d.getMonth()+1)+'_'+p(d.getHours())+p(d.getMinutes()); }
+  function fmtMin(s){ return Math.ceil(s/60)+' min'; }
   function setMode(m){ mode=m; $('bArea').classList.toggle('on',m==='area'); $('bHome').classList.toggle('on',m==='home');
-    $('hint').textContent = m==='area' ? 'Toque no mapa para marcar os cantos da área' : 'Toque no mapa onde o drone vai decolar'; }
+    $('bArea').textContent = fixed ? 'Pontos' : 'Área';
+    $('hint').textContent = m==='home' ? 'Toque no mapa onde o drone vai decolar' : (fixed ? 'Toque no mapa para adicionar um ponto no fim da rota' : 'Toque no mapa para marcar os cantos da área'); }
   function applyCam(){ var c=CAMS[$('cam').value]; ['hfov','vfov','imgw'].forEach(function(k){ $(k).disabled=!!c; if(c) $(k).value=c[k]; }); }
   function opts(){ var n=function(id){return parseFloat($(id).value);};
-    return { alt:Math.min(120,Math.max(10,n('alt')||60)), speed:Math.min(10,Math.max(1,n('spd')||5)), hfov:n('hfov')||68.4, vfov:n('vfov')||54, imgw:n('imgw')||8064,
+    return { alt:Math.min(120,Math.max(10,n('alt')||30)), speed:Math.min(10,Math.max(1,n('spd')||3)), hfov:n('hfov')||68.4, vfov:n('vfov')||54, imgw:n('imgw')||8064,
       side:isNaN(n('side'))?70:n('side'), front:isNaN(n('front'))?75:n('front'), spacing:n('spacing')||0, margin:n('margin')||0, photo:$('photo').value,
-      bearing:parseInt($('ang').value,10), home:home, maxd:MAXD, yaw:+$('yaw').value, end:+$('end').value, lost:+$('lost').value, maptype:+$('maptype').value }; }
-  function save(){ try{ localStorage.setItem('fimiGrade2', JSON.stringify({poly:poly,home:home,f:FIELDS.reduce(function(a,k){a[k]=$(k).value;return a;},{})})); }catch(e){} }
+      bearing:parseInt($('ang').value,10), home:home, maxd:MAXD, yaw:+$('yaw').value, end:+$('end').value, lost:+$('lost').value, maptype:+$('maptype').value,
+      batMin:n('bat')||29, reserve:Math.min(60,Math.max(10,isNaN(n('reserve'))?30:n('reserve'))) }; }
+  function fieldVals(){ return FIELDS.reduce(function(a,k){a[k]=$(k).value;return a;},{}); }
+  function state(){ return {v:1, poly:poly, fixed:fixed, home:home, f:fieldVals()}; }
+  function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state())); }catch(e){} }
+  function load(st, keepSpeedAlt){
+    poly=st.poly||[]; fixed=st.fixed||null; home=st.home||null;
+    Object.keys(st.f||{}).forEach(function(k){ if($(k) && !(keepSpeedAlt && (k==='alt'||k==='spd'))) $(k).value=st.f[k]; });
+    applyCam(); setMode('area');
+  }
+  function fit(){ var pts=(fixed||poly).concat(home?[home]:[]); if(pts.length) map.fitBounds(L.latLngBounds(pts.map(function(q){return [q.lat,q.lon];})),{padding:[30,30],maxZoom:18}); }
 
   function redraw(){
     vMarks.forEach(function(m){map.removeLayer(m);}); vMarks=[];
-    poly.forEach(function(p,i){ var m=L.marker([p.lat,p.lon],{icon:icon('vx'),draggable:true}).addTo(map);
+    if(!fixed) poly.forEach(function(p,i){ var m=L.marker([p.lat,p.lon],{icon:icon('vx'),draggable:true}).addTo(map);
       m.on('drag',function(e){ var ll=e.target.getLatLng(); poly[i]={lat:ll.lat,lon:ll.lng}; compute(); }); vMarks.push(m); });
+    if(fixed) fixed.forEach(function(p,i){ var m=L.marker([p.lat,p.lon],{icon:icon('wp',i+1,20),draggable:true}).addTo(map);
+      m.on('drag',function(e){ var ll=e.target.getLatLng(); fixed[i]={lat:ll.lat,lon:ll.lng}; compute(); });
+      m.bindPopup('<button data-del="'+i+'" style="min-height:40px">Excluir ponto '+(i+1)+'</button>'); vMarks.push(m); });
     if(homeMark){map.removeLayer(homeMark);homeMark=null;}
-    if(home){ homeMark=L.marker([home.lat,home.lon],{icon:icon('hm','H'),draggable:true,zIndexOffset:1000}).addTo(map);
+    if(home){ homeMark=L.marker([home.lat,home.lon],{icon:icon('hm','H',26),draggable:true,zIndexOffset:1000}).addTo(map);
       homeMark.on('dragend',function(e){var ll=e.target.getLatLng(); home={lat:ll.lat,lon:ll.lng}; compute();}); }
-    compute();
+    setMode(mode); compute();
   }
+  map.on('popupopen',function(e){ var b=e.popup.getElement().querySelector('button[data-del]'); if(b) b.onclick=function(){ fixed.splice(+b.dataset.del,1); map.closePopup(); redraw(); }; });
+
   function compute(){
     var o=opts(); $('angTxt').textContent = o.bearing<0 ? 'automática' : o.bearing+'°';
     if(polyLayer) map.removeLayer(polyLayer); if(wpLayer) map.removeLayer(wpLayer);
-    polyLayer = poly.length>=2 ? L.polygon(poly.map(function(p){return [p.lat,p.lon];}),{color:'#0f6e78',weight:2,fillOpacity:.15}).addTo(map) : null;
-    var r = Core.build(poly,o); last=r;
+    polyLayer = (!fixed && poly.length>=2) ? L.polygon(poly.map(function(p){return [p.lat,p.lon];}),{color:'#0f6e78',weight:2,fillOpacity:.15}).addTo(map) : null;
+    var r;
+    if(fixed){ r={wps:fixed.slice(), lines:0, area:0, length:0, warns:[], spacing:0, photoDist:0, interval:0, gsd:0};
+      for(var z=1;z<fixed.length;z++){ var g=Core.hav(fixed[z-1],fixed[z]); r.length+=g; if(g<10) r.warns.push('Pontos '+z+' e '+(z+1)+' estão a menos de 10 m: o app pode recusar.'); }
+      if(home){ var far=0; fixed.forEach(function(p){far=Math.max(far,Core.hav(home,p));}); if(far>MAXD) r.warns.push('Ponto mais distante a '+Math.round(far)+' m da decolagem. O limite é '+MAXD+' m.'); }
+    } else r = Core.build(poly,o);
+    last=r;
     wpLayer = L.layerGroup().addTo(map);
-    if(r.wps.length){ L.polyline(r.wps.map(function(p){return [p.lat,p.lon];}),{color:'#ff5a1f',weight:3}).addTo(wpLayer);
-      if(home) L.polyline([[home.lat,home.lon],[r.wps[0].lat,r.wps[0].lon]],{color:'#ff5a1f',weight:2,dashArray:'6 6'}).addTo(wpLayer);
-      if(r.wps.length<=150) r.wps.forEach(function(p,i){ L.marker([p.lat,p.lon],{icon:L.divIcon({className:'',html:'<div class="wp">'+(i+1)+'</div>',iconSize:[20,20],iconAnchor:[10,10]}),interactive:false}).addTo(wpLayer); }); }
-    var dist=r.length + (home&&r.wps.length ? Core.hav(home,r.wps[0]) + (o.end===4?Core.hav(r.wps[r.wps.length-1],home):0) : 0);
-    $('sPts').textContent=r.wps.length; $('sPts').style.color = r.wps.length>99?'var(--warn)':'';
-    $('sDist').textContent = dist>=1000 ? (dist/1000).toFixed(2)+' km' : Math.round(dist)+' m';
-    var sec = dist/o.speed + r.wps.length*3; $('sTime').textContent = Math.ceil(sec/60)+' min';
-    $('sArea').textContent=(r.area/10000).toFixed(2)+' ha';
+    var usable = o.batMin*60*(1-o.reserve/100);
+    parts = r.wps.length>=2 ? Core.splitBalanced(r.wps, home, o, usable) : [];
+    var colors=['#ff5a1f','#ffd21f','#3ad1ff','#c56bff','#5be37a','#ff7ab6'];
+    parts.forEach(function(p,i){ L.polyline(p.map(function(q){return [q.lat,q.lon];}),{color:colors[i%colors.length],weight:3}).addTo(wpLayer); });
+    if(home && r.wps.length) L.polyline([[home.lat,home.lon],[r.wps[0].lat,r.wps[0].lon]],{color:'#ff5a1f',weight:2,dashArray:'6 6'}).addTo(wpLayer);
+    if(!fixed && r.wps.length<=150) r.wps.forEach(function(p,i){ L.marker([p.lat,p.lon],{icon:icon('wp',i+1,20),interactive:false}).addTo(wpLayer); });
+    var total = parts.reduce(function(a,p){return a+Core.missionTime(p,home,o);},0);
+    $('sBat').textContent = parts.length; $('sTime').textContent = fmtMin(total);
+    $('sArea').textContent = fixed ? '–' : (r.area/10000).toFixed(2)+' ha'; $('sPts').textContent = r.wps.length;
     var w=r.warns.slice(), tips='';
-    if(r.wps.length){
+    if(r.wps.length && !fixed){
       tips = r.lines+' faixas a cada '+r.spacing.toFixed(0)+' m · resolução ≈ '+r.gsd.toFixed(1)+' cm/px · ';
       tips += o.photo==='wp' ? 'foto em cada ponto' : 'foto por intervalo a cada <b>'+Math.max(0.5,Math.floor(r.interval*2)/2)+' s</b> (gimbal em −90°)';
       if(o.photo==='interval' && r.interval<MIN_INT) w.push('Intervalo de foto abaixo de '+MIN_INT+' s. Reduza a velocidade para '+Math.floor(r.photoDist/MIN_INT*2)/2+' m/s ou suba a altura.');
-      if(sec>25*60) w.push('Tempo estimado acima de 25 min: divida a área em mais de uma bateria.');
     }
+    if(parts.length) tips += (tips?'<br>':'')+'Cada bateria: até '+fmtMin(usable)+' de voo ('+o.reserve+'% de reserva sobre '+o.batMin+' min).';
     $('tips').innerHTML = tips;
+    $('modeNote').textContent = fixed ? 'Editando pontos de um KML do FIMI: arraste, toque num ponto para excluir ou toque no mapa para adicionar no fim.' : '';
     $('warns').innerHTML = w.map(function(t){return '<li>'+t.replace(/</g,'&lt;')+'</li>';}).join('');
-    var parts = Math.ceil(r.wps.length/99);
-    $('parts').innerHTML = r.wps.length<2 ? '<button class="pri" disabled>Marque pelo menos 3 cantos no mapa</button>' :
-      Array.from({length:parts},function(_,i){return '<button class="pri" data-part="'+i+'">Baixar KML para o FIMI'+(parts>1?' – parte '+(i+1)+' de '+parts:'')+'</button>';}).join('');
+    var n=parts.length;
+    $('parts').innerHTML = !n ? '<button class="pri" disabled>'+(fixed?'Adicione pelo menos 2 pontos':'Marque pelo menos 3 cantos no mapa')+'</button>' :
+      parts.map(function(p,i){ return '<button class="pri" data-part="'+i+'"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:8px;border:2px solid #fff;vertical-align:-1px;background:'+colors[i%colors.length]+'"></span>'+(n>1?'Bateria '+(i+1)+' de '+n+' · ':'Baixar KML para o FIMI · ')+fmtMin(Core.missionTime(p,home,o))+'</button>'; }).join('');
     save();
   }
   function fname(){ if(!$('name').value.trim()) $('name').value=autoName(); return $('name').value.trim().replace(/[^\w\-]+/g,'_').slice(0,40); }
@@ -325,30 +393,73 @@ if (typeof module!=='undefined') module.exports=Core;
         if(setHome){ home=ll; redraw(); } map.setView([ll.lat,ll.lon],Math.max(map.getZoom(),17)); if(setHome) toast('H marcado na sua posição'); },
       function(){ toast('Não foi possível obter a localização'); },{enableHighAccuracy:true,timeout:15000}); }
 
-  $('parts').addEventListener('click',function(e){ var b=e.target.closest('button[data-part]'); if(!b||!last) return;
-    var i=+b.dataset.part, parts=Math.ceil(last.wps.length/99), wps=last.wps.slice(i*99,(i+1)*99), o=opts(), d=0;
+  // ---- Importação ----
+  function hull(pts){ var P=pts.map(function(p){return {x:p.lon,y:p.lat,p:p};}).sort(function(a,b){return a.x-b.x||a.y-b.y;});
+    if(P.length<3) return pts.slice(); var cr=function(o,a,b){return (a.x-o.x)*(b.y-o.y)-(a.y-o.y)*(b.x-o.x);}, lo=[], up=[];
+    P.forEach(function(q){ while(lo.length>=2&&cr(lo[lo.length-2],lo[lo.length-1],q)<=0) lo.pop(); lo.push(q); });
+    for(var i=P.length-1;i>=0;i--){ var q=P[i]; while(up.length>=2&&cr(up[up.length-2],up[up.length-1],q)<=0) up.pop(); up.push(q); }
+    return lo.slice(0,-1).concat(up.slice(0,-1)).map(function(q){return q.p;}); }
+  function txt(el,name){ var c=el.getElementsByTagName(name)[0]; return c ? (c.textContent||'').trim() : null; }
+  function importKml(text, fileName){
+    var doc=new DOMParser().parseFromString(text,'application/xml');
+    if(doc.getElementsByTagName('parsererror').length) return toast('Arquivo KML inválido');
+    // 1) KML gerado por esta ferramenta: área e ajustes completos
+    var datas=doc.getElementsByTagName('Data');
+    for(var i=0;i<datas.length;i++) if(datas[i].getAttribute('name')==='rotaGrade'){
+      try{ var st=JSON.parse(txt(datas[i],'value')); load(st,false); redraw(); fit(); return toast('Área e ajustes carregados'); }catch(e){}
+    }
+    // 2) KML do FIMI (exportado pelo app ou antigo): pontos por Placemark
+    var pms=doc.getElementsByTagName('Placemark'), pts=[];
+    for(var j=0;j<pms.length;j++){ var la=txt(pms[j],'latitude'), lo=txt(pms[j],'longitude'), nu=txt(pms[j],'number');
+      if(la!==null && lo!==null && isFinite(+la) && isFinite(+lo) && +la!==0) pts.push({lat:+la,lon:+lo,n:nu===null?j:+nu}); }
+    if(pts.length>=2){
+      pts.sort(function(a,b){return a.n-b.n;});
+      var info=doc.getElementsByTagName('PointInfo')[0];
+      if(info){ var sp=txt(info,'speed'), en=txt(info,'excuteEnd'), dc=txt(info,'disconnectType'), ty=txt(info,'type'), mt=txt(info,'mapType');
+        if(sp&&+sp>0) $('spd').value=(+sp/10); if(en!==null) $('end').value=(+en===4?'4':'0'); if(dc!==null) $('lost').value=dc; if(ty!==null) $('yaw').value=(+ty===0?'0':'2'); if(mt!==null) $('maptype').value=mt; }
+      var al=txt(pms[0],'altitude'); if(al&&+al>0) $('alt').value=+al;
+      var choice = confirmBox('Este KML tem '+pts.length+' pontos, sem a área original.', 'Editar os pontos', 'Recriar a área e refazer a grade');
+      choice.then(function(asArea){
+        var p2=pts.map(function(p){return {lat:p.lat,lon:p.lon};});
+        if(asArea){ fixed=null; poly=hull(p2); } else { fixed=p2; poly=[]; }
+        $('name').value=(fileName||'Rota').replace(/\.kml$/i,'').replace(/_GoogleEarth$/,'')+'_editado';
+        redraw(); fit(); });
+      return;
+    }
+    // 3) KML comum com polígono (Google Earth etc.)
+    var p=Core.parsePoly(text);
+    if(p){ fixed=null; poly=p; redraw(); fit(); return toast('Área carregada'); }
+    toast('Nenhuma rota ou área encontrada no arquivo');
+  }
+  function confirmBox(msg, a, b){ return new Promise(function(res){
+    var d=document.createElement('div'); d.style.cssText='position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px';
+    d.innerHTML='<div class="card" style="max-width:420px;width:100%"><p style="margin:0 0 12px">'+msg+'</p><button class="pri" id="cbA">'+a+'</button><button class="sec" id="cbB" style="margin-top:8px">'+b+'</button></div>';
+    document.body.appendChild(d); d.querySelector('#cbA').onclick=function(){d.remove();res(false);}; d.querySelector('#cbB').onclick=function(){d.remove();res(true);}; }); }
+
+  $('parts').addEventListener('click',function(e){ var b=e.target.closest('button[data-part]'); if(!b) return;
+    var i=+b.dataset.part, n=parts.length, wps=parts[i], o=opts(), d=0;
     for(var z=1;z<wps.length;z++) d+=Core.hav(wps[z-1],wps[z]);
-    var nm=fname()+(parts>1?'_parte'+(i+1):''); download(nm+'.kml', Core.fimiKml(nm,wps,o,d).replace('<saveFlag>0</saveFlag>','<saveFlag>1</saveFlag>')); });
+    var nm=fname()+(n>1?'_bat'+(i+1)+'de'+n:'');
+    download(nm+'.kml', Core.fimiKml(nm,wps,o,d,JSON.stringify(state()))); });
   $('bGE').onclick=function(){ if(!last||!last.wps.length) return toast('Desenhe a área primeiro');
-    download(fname()+'_GoogleEarth.kml', Core.stdKml(fname(),poly,last.wps,home,opts().alt)); };
+    download(fname()+'_GoogleEarth.kml', Core.stdKml(fname(),fixed?hull(fixed):poly,last.wps,home,opts().alt)); };
   map.on('click',function(e){ var p={lat:e.latlng.lat,lon:e.latlng.lng};
-    if(mode==='area'){ poly.push(p); } else { home=p; setMode('area'); } redraw(); });
+    if(mode==='home'){ home=p; setMode('area'); } else if(fixed){ fixed.push(p); } else { poly.push(p); } redraw(); });
   $('bArea').onclick=function(){setMode('area');}; $('bHome').onclick=function(){setMode('home');};
-  $('bUndo').onclick=function(){ poly.pop(); redraw(); };
-  $('bClear').onclick=function(){ poly=[]; $('name').value=autoName(); redraw(); };
+  $('bUndo').onclick=function(){ (fixed||poly).pop(); redraw(); };
+  $('bClear').onclick=function(){ poly=[]; fixed=null; $('name').value=autoName(); redraw(); };
   $('bGps').onclick=function(){ locate(true); };
+  $('bOpen').onclick=function(){ $('fileIn').value=''; $('fileIn').click(); };
   $('cam').onchange=function(){ applyCam(); compute(); };
-  $('fileIn').onchange=function(e){ var f=e.target.files[0]; if(!f) return; f.text().then(function(t){ var p=Core.parsePoly(t);
-    if(!p) return toast('Nenhum polígono encontrado no arquivo');
-    poly=p; redraw(); map.fitBounds(L.polygon(p.map(function(q){return [q.lat,q.lon];})).getBounds(),{padding:[30,30]}); }); };
+  $('fileIn').onchange=function(e){ var f=e.target.files[0]; if(!f) return; f.text().then(function(t){ importKml(t,f.name); }); };
   FIELDS.forEach(function(k){ $(k).addEventListener('input',compute); });
 
-  var saved=null; try{ saved=JSON.parse(localStorage.getItem('fimiGrade2')||'null'); }catch(e){}
-  if(saved){ poly=saved.poly||[]; home=saved.home||null; Object.keys(saved.f||{}).forEach(function(k){ if($(k)) $(k).value=saved.f[k]; }); }
+  var saved=null; try{ saved=JSON.parse(localStorage.getItem(KEY)||'null'); }catch(e){}
+  if(saved) load(saved,false);
+  else { var old=null; try{ old=JSON.parse(localStorage.getItem('fimiGrade2')||'null'); }catch(e){} if(old) load(old,true); }
   if(!$('name').value) $('name').value=autoName();
   applyCam();
-  if(poly.length) map.fitBounds(L.polygon(poly.map(function(q){return [q.lat,q.lon];})).getBounds(),{padding:[30,30]});
-  else locate(!home);
+  if(poly.length||fixed) fit(); else locate(!home);
   redraw();
   var okTile=false; sat.on('tileload',function(){okTile=true;}); setTimeout(function(){ if(!okTile) $('nomap').style.display='flex'; },8000);
 }
