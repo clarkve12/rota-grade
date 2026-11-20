@@ -72,6 +72,11 @@ body.fs header,body.fs main{display:none}
 body.fs #mapwrap{position:fixed;inset:0;height:100vh;height:100dvh;min-height:0;z-index:900}
 body.fs .hint{display:none}
 body.fs #fsInfo{display:block;position:absolute;z-index:500;top:8px;left:56px;right:66px;text-align:center;background:rgba(19,33,43,.88);color:#fff;padding:5px 10px;border-radius:14px;font-size:13px;pointer-events:none}
+/* Mira no lugar da mãozinha (computador): o ponto cai no centro do "+" */
+#map.leaflet-container,#map .leaflet-grab,#map .leaflet-interactive{cursor:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2232%22%20height%3D%2232%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cg%20fill%3D%22none%22%20stroke-linecap%3D%22round%22%3E%3Ccircle%20cx%3D%2216%22%20cy%3D%2216%22%20r%3D%229%22%20stroke%3D%22%2313212b%22%20stroke-width%3D%224%22/%3E%3Ccircle%20cx%3D%2216%22%20cy%3D%2216%22%20r%3D%229%22%20stroke%3D%22%23fff%22%20stroke-width%3D%222%22/%3E%3Cpath%20d%3D%22M16%203v8M16%2021v8M3%2016h8M21%2016h8%22%20stroke%3D%22%2313212b%22%20stroke-width%3D%224%22/%3E%3Cpath%20d%3D%22M16%203v8M16%2021v8M3%2016h8M21%2016h8%22%20stroke%3D%22%23ff5a1f%22%20stroke-width%3D%222%22/%3E%3C/g%3E%3Ccircle%20cx%3D%2216%22%20cy%3D%2216%22%20r%3D%221.6%22%20fill%3D%22%23ff5a1f%22%20stroke%3D%22%23fff%22%20stroke-width%3D%22.8%22/%3E%3C/svg%3E") 16 16,crosshair}
+body.leaflet-dragging #map.leaflet-grab,body.leaflet-dragging #map .leaflet-interactive{cursor:grabbing}
+#map .leaflet-marker-draggable{cursor:move}
+#map .leaflet-control,#map .leaflet-control a,#bFs,.tools button{cursor:pointer}
 #toast{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);background:#13212b;color:#fff;padding:10px 16px;border-radius:10px;display:none;z-index:1000;max-width:90vw}
 </style>
 </head>
