@@ -427,13 +427,22 @@ if (typeof module!=='undefined') module.exports=Core;
   var MAXD=1000, MIN_INT=2, KEY='fimiGrade3';
   // poly: cantos da área (modo grade). fixed: pontos importados de um KML do FIMI (modo pontos), ou null.
   var gcps=[], lastCalc=null, poly=[], fixed=null, home=null, mode='area', vMarks=[], wpLayer=null, polyLayer=null, homeMark=null, last=null, parts=[];
-  var map = L.map('map',{zoomControl:true}).setView([-15.78,-47.93],4);
-  var sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?blankTile=false',{maxZoom:21,maxNativeZoom:19,attribution:'Esri',crossOrigin:true}).addTo(map);
+  var map = L.map('map',{zoomControl:true,maxZoom:22}).setView([-15.78,-47.93],4);
+  var sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?blankTile=false',{maxZoom:22,maxNativeZoom:19,attribution:'Esri',crossOrigin:true}).addTo(map);
   // Onde não há foto no zoom pedido, o servidor responde 404: baixa o zoom nativo e amplia a última foto disponível.
-  var clar = L.tileLayer('https://clarity.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?blankTile=false',{maxZoom:21,maxNativeZoom:19,attribution:'Esri Clarity',crossOrigin:true});
-  [sat,clar].forEach(function(lay){ var probed={}; lay.on('tileerror',function(e){ var z=e.coords.z;
-    if(probed[z] || z>lay.options.maxNativeZoom || z<=15 || !navigator.onLine) return; probed[z]=true;
-    fetch(e.tile.src,{mode:'cors'}).then(function(r){ if(r.status===404 && z<=lay.options.maxNativeZoom){ lay.options.maxNativeZoom=z-1; lay.redraw(); } else probed[z]=false; }, function(){ probed[z]=false; }); }); });
+  var clar = L.tileLayer('https://clarity.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?blankTile=false',{maxZoom:22,maxNativeZoom:19,attribution:'Esri Clarity',crossOrigin:true});
+  // Onde não há foto no zoom pedido, os blocos falham (cinza). Ao detectar isso, o mapa passa a AMPLIAR a última foto disponível.
+  // Regra: num mesmo zoom, 3+ blocos falharam e nenhum carregou -> esse zoom não tem foto aqui (ou não foi salvo, se estiver offline).
+  function regionKey(){ var c=map.getCenter(), z=11, n=Math.pow(2,z), r=c.lat*Math.PI/180; return Math.floor((c.lng+180)/360*n)+'/'+Math.floor((1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*n); }
+  [sat,clar].forEach(function(lay){ var cnt={};
+    lay.on('tileload',function(e){ var z=e.coords.z; (cnt[z]=cnt[z]||{e:0,o:0}).o++; });
+    lay.on('tileerror',function(e){ var z=e.coords.z, c=(cnt[z]=cnt[z]||{e:0,o:0}); c.e++;
+      if(c.e>=3 && c.o===0 && z<=lay.options.maxNativeZoom && z>12){   // vale também sem internet: amplia o último nível salvo
+        lay.options.maxNativeZoom=z-1; lay._region=regionKey(); cnt={}; setTimeout(function(){ lay.redraw(); },50); } });
+    map.on('zoomstart',function(){ cnt={}; });
+    // mudou de região (ex.: da fazenda para a cidade) ou voltou a internet: tenta de novo o zoom máximo
+    map.on('moveend',function(){ if(lay.options.maxNativeZoom<19 && lay._region && regionKey()!==lay._region){ lay.options.maxNativeZoom=19; lay._region=null; cnt={}; lay.redraw(); } });
+    window.addEventListener('online',function(){ if(lay.options.maxNativeZoom<19){ lay.options.maxNativeZoom=19; cnt={}; lay.redraw(); } }); });
   var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:20,maxNativeZoom:19,attribution:'© OpenStreetMap',crossOrigin:true});
   L.control.layers({'Satélite (Esri)':sat,'Satélite 2 (Esri Clarity)':clar,'Mapa':osm}).addTo(map);
   var icon = function(cls,html,s){ s=s||24; return L.divIcon({className:'',html:'<div class="'+cls+'">'+(html||'')+'</div>',iconSize:[s,s],iconAnchor:[s/2,s/2]}); };
