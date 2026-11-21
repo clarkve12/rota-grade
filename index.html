@@ -93,6 +93,19 @@ body.leaflet-dragging #map.leaflet-grab,body.leaflet-dragging #map .leaflet-inte
 #report table{width:100%;border-collapse:collapse;margin:4px 0}#report td,#report th{border:1px solid #bbb;padding:3px 6px;text-align:left;font-size:11.5px}
 #report th{background:#eef2f4}#report img{width:100%;border:1px solid #999}#report ol{padding-left:18px}#report li{margin:2px 0}
 #report .muted{color:#555;font-size:10.5px}
+#simBar{display:none;position:absolute;z-index:620;left:8px;right:8px;bottom:8px;background:rgba(13,39,71,.94);color:#fff;border-radius:12px;padding:8px 10px;box-shadow:0 4px 16px rgba(0,0,0,.4)}
+body.sim .wp,body.sim .vx{display:none}
+body.sim #simBar{display:block}body.sim .tools,body.sim .hint,body.sim #fsInfo{display:none}
+#simBar .row{display:flex;align-items:center;gap:8px}
+#simBar button{min-height:42px;min-width:42px;padding:0 10px;border:0;border-radius:10px;background:#ff6a1f;color:#fff;font-weight:700}
+#simBar button.ghost{background:rgba(255,255,255,.15)}
+#simBar input[type=range]{flex:1;min-height:42px;padding:0;background:transparent;border:0;accent-color:#ff6a1f}
+#simBar select{min-height:36px;width:auto;padding:0 6px;background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25)}
+#simBar select option{color:#111}
+#simInfo{font-size:13px;line-height:1.35;margin-top:4px}#simInfo b{color:#ffd0b3}
+#bSimMap{position:absolute;z-index:500;top:112px;right:10px;width:46px;height:46px;min-height:0;padding:0;border-radius:8px;box-shadow:0 1px 5px rgba(0,0,0,.4);font-size:18px}
+body.sim #bSimMap{background:#ff6a1f;color:#fff;border-color:#ff6a1f}
+.drone{width:34px;height:34px;filter:drop-shadow(0 2px 3px rgba(0,0,0,.6))}
 #toast{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);background:#13212b;color:#fff;padding:10px 16px;border-radius:10px;display:none;z-index:1000;max-width:90vw}
 </style>
 </head>
@@ -105,6 +118,18 @@ body.leaflet-dragging #map.leaflet-grab,body.leaflet-dragging #map .leaflet-inte
   <div id="loupe"><div id="loupeMap"></div><span class="dot"></span></div>
   <button id="bFs" aria-label="Tela cheia" title="Tela cheia"><svg id="icFs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
   <div id="fsInfo"></div>
+  <button id="bSimMap" aria-label="Simular voo" title="Simular voo">▶</button>
+  <div id="simBar">
+    <div class="row">
+      <button id="simPlay" aria-label="Play">▶</button>
+      <input id="simRange" type="range" min="0" max="1000" value="0" step="1" aria-label="Progresso do voo">
+      <button id="simClose" class="ghost" aria-label="Fechar simulação">✕</button>
+    </div>
+    <div class="row" style="justify-content:space-between;margin-top:2px">
+      <div id="simInfo">—</div>
+      <select id="simSpeed" aria-label="Velocidade da simulação"><option value="1">1×</option><option value="10">10×</option><option value="30" selected>30×</option><option value="60">60×</option><option value="120">120×</option></select>
+    </div>
+  </div>
   <div class="hint" id="hint">Toque no mapa para marcar os cantos da área</div>
   <div class="tools">
     <button id="bArea" class="on">Área</button>
@@ -134,6 +159,7 @@ body.leaflet-dragging #map.leaflet-grab,body.leaflet-dragging #map .leaflet-inte
     <p id="tips"></p>
     <ul id="warns"></ul>
     <div id="parts"></div>
+    <button class="sec" id="bSim" style="margin-top:8px;width:100%">▶ Simular voo no mapa</button>
     <button class="sec" id="bOpen" style="margin-top:8px">Abrir KML para editar</button>
     <input id="fileIn" type="file" accept=".kml,application/vnd.google-earth.kml+xml,text/xml,application/xml" hidden>
     <p class="note" id="modeNote"></p>
@@ -522,6 +548,7 @@ if (typeof module!=='undefined') module.exports=Core;
     lastCalc = {o:o, r:r, parts:parts, angles:angles, npass:npass, joined:joined, total:total, totPts:totPts, terr:terr, usable:usable};
     if(+$('gcpN').value>0 && !gcps.length && (poly.length>=3 || (fixed&&fixed.length>=3)) && !compute._gcpBusy){ compute._gcpBusy=true; setTimeout(function(){ genGcps(); compute._gcpBusy=false; },0); }
     if(!+$('gcpN').value && gcps.length){ setTimeout(function(){ gcps=[]; redraw(); },0); }
+    if(typeof Sim!=='undefined') Sim.rebuild();
     save();
   }
   // Nome do arquivo = projeto + data/hora. A data é fixada no 1º download e vale para todas as partes da mesma rota.
@@ -768,6 +795,82 @@ if (typeof module!=='undefined') module.exports=Core;
   $('bReportHtml').onclick=function(){ buildReport().then(function(html){ if(!html) return;
     var css=[].slice.call(document.styleSheets).map(function(){return '';}).join('');
     download(fname()+'_relatorio.html','<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fimapa – relatório – '+escH(baseName($('name').value)||'Área')+'</title><style>body{margin:16px;font:13px/1.45 system-ui,sans-serif;color:#111;background:#fff;max-width:900px}h1{font-size:20px;margin:0 0 2px}h2{font-size:15px;margin:16px 0 6px;border-bottom:2px solid #13212b;padding-bottom:2px}table{width:100%;border-collapse:collapse}td,th{border:1px solid #bbb;padding:4px 6px;text-align:left;font-size:12.5px}th{background:#eef2f4}img{width:100%;border:1px solid #999}.muted{color:#555;font-size:11px}ol{padding-left:18px}@page{size:A4;margin:12mm}</style></head><body>'+html+'</body></html>'); }); };
+  // ======================= Simulador de voo =======================
+  var Sim=(function(){
+    var segs=[], total=0, t=0, playing=false, raf=null, lastTs=0, layer=null, drone=null, trail=null, swath=null, foot=null, fpw=0, fpl=0, built=false;
+    var D2R=Math.PI/180, R=6378137;
+    function brg(a,b){ var y=Math.sin((b.lon-a.lon)*D2R)*Math.cos(b.lat*D2R), x=Math.cos(a.lat*D2R)*Math.sin(b.lat*D2R)-Math.sin(a.lat*D2R)*Math.cos(b.lat*D2R)*Math.cos((b.lon-a.lon)*D2R); return (Math.atan2(y,x)/D2R+360)%360; }
+    function offset(p,dx,dy){ return {lat:p.lat+dy/R/D2R, lon:p.lon+dx/(R*Math.cos(p.lat*D2R))/D2R}; }
+    function build(){
+      var c=lastCalc; segs=[]; total=0; if(!c||!c.parts.length) return false;
+      var o=c.o, sp=o.speed, fp=c.r&&c.r.gsd ? {w:c.r.gsd*o.imgw/100, l:c.r.gsd*o.imgw/100*(o.vfov&&o.hfov?Math.tan(o.vfov/2*D2R)/Math.tan(o.hfov/2*D2R):0.75)} : null;
+      fpw=fp?fp.w:0; fpl=fp?fp.l:0;
+      var push=function(s){ s.t0=total; total+=s.dur; s.t1=total; segs.push(s); };
+      c.parts.forEach(function(p,pi){ var w=p.wps, H=home||w[0], a0=w[0].alt!=null?w[0].alt:o.alt;
+        push({k:'climb', a:H, b:H, h0:0, h1:a0, dur:a0/3, part:pi, wp:-1});
+        push({k:'move', a:H, b:w[0], h0:a0, h1:a0, dur:Core.hav(H,w[0])/sp, part:pi, wp:-1, transit:true});
+        w.forEach(function(q,i){ var hq=q.alt!=null?q.alt:o.alt;
+          push({k:'hover', a:q, b:q, h0:hq, h1:hq, dur:3, part:pi, wp:i});
+          if(i<w.length-1){ var n=w[i+1], hn=n.alt!=null?n.alt:o.alt; push({k:'move', a:q, b:n, h0:hq, h1:hn, dur:Core.hav(q,n)/sp, part:pi, wp:i, mission:true}); } });
+        var L=w[w.length-1], aL=L.alt!=null?L.alt:o.alt;
+        push({k:'move', a:L, b:H, h0:aL, h1:aL, dur:Core.hav(L,H)/sp, part:pi, wp:w.length-1, transit:true});
+        push({k:'descend', a:H, b:H, h0:aL, h1:0, dur:aL/3, part:pi, wp:w.length-1});
+        if(pi<c.parts.length-1) push({k:'swap', a:H, b:H, h0:0, h1:0, dur:4, part:pi, wp:w.length-1}); });
+      return true; }
+    function segAt(tt){ var lo=0, hi=segs.length-1; while(lo<hi){ var m=(lo+hi)>>1; if(segs[m].t1<tt) lo=m+1; else hi=m; } return segs[lo]; }
+    function pos(s,tt){ var f=s.dur>0?Math.min(1,Math.max(0,(tt-s.t0)/s.dur)):1; return {lat:s.a.lat+(s.b.lat-s.a.lat)*f, lon:s.a.lon+(s.b.lon-s.a.lon)*f, h:s.h0+(s.h1-s.h0)*f, f:f}; }
+    function heading(s){ var i=segs.indexOf(s); for(var k=i;k<segs.length;k++) if(segs[k].k==='move' && Core.hav(segs[k].a,segs[k].b)>0.5) return brg(segs[k].a,segs[k].b); return 0; }
+    function mmss(x){ x=Math.max(0,Math.round(x)); var m=Math.floor(x/60), s=x%60; return m+':'+(s<10?'0':'')+s; }
+    function pxPerM(){ var z=map.getZoom(), lat=map.getCenter().lat; return 256*Math.pow(2,z)/(2*Math.PI*R*Math.cos(lat*D2R)); }
+    function draw(){
+      if(!segs.length) return; var s=segAt(t), p=pos(s,t), hd=heading(s), c=lastCalc, o=c.o;
+      // rastro e faixa fotografada até agora
+      var tr=[], sw=[], cur=null;
+      for(var i=0;i<segs.length && segs[i].t0<=t;i++){ var g=segs[i], e=(segs[i].t1<=t)?g.b:pos(g,t);
+        if(g.k==='move'){ if(!tr.length || tr[tr.length-1]!==g.a) tr.push(g.a); tr.push(e);
+          if(g.mission){ if(!cur){ cur=[g.a]; sw.push(cur); } cur.push(e); } else cur=null; }
+        if(g.k==='swap'||g.k==='climb') cur=null; }
+      trail.setLatLngs(tr.map(function(q){return [q.lat,q.lon];}));
+      swath.setLatLngs(sw.map(function(line){ return line.map(function(q){return [q.lat,q.lon];}); }));
+      swath.setStyle({weight:Math.max(2, fpw*pxPerM())});
+      drone.setLatLng([p.lat,p.lon]); var el=drone.getElement(); if(el){ var ic=el.querySelector('svg'); if(ic) ic.style.transform='rotate('+hd+'deg)'; }
+      // pegada da foto no ponto atual (só no ar)
+      if(fpw && p.h>1 && s.k!=='climb' && s.k!=='descend'){ var hw=fpw/2, hl=fpl/2, a=hd*D2R, cs=Math.cos(a), sn=Math.sin(a);
+        var cr=[[-hw,-hl],[hw,-hl],[hw,hl],[-hw,hl]].map(function(v){ return offset(p, v[0]*cs+v[1]*sn, -v[0]*sn+v[1]*cs); });
+        foot.setLatLngs(cr.map(function(q){return [q.lat,q.lon];})); foot.setStyle({opacity:1,fillOpacity:.18}); } else foot.setStyle({opacity:0,fillOpacity:0});
+      // painel
+      var part=c.parts[s.part], n=c.parts.length, pStart=segs.filter(function(g){return g.part===s.part;})[0].t0, used=(t-pStart)/(o.batMin*60)*100;
+      var what = s.k==='climb'?'decolando':s.k==='descend'?'pousando':s.k==='swap'?'<b>troca de bateria</b>':s.transit?(s.wp<0?'indo para o 1º ponto':'voltando para o H'):'ponto '+(s.wp+1)+' de '+part.wps.length;
+      var bat = s.k==='swap' ? '' : ' · bateria ≈'+Math.max(0,Math.round(100-used))+'%'+(100-used<o.reserve?' <b>(abaixo da reserva!)</b>':'');
+      $('simInfo').innerHTML='Bateria '+(s.part+1)+'/'+n+' · '+what+'<br>'+mmss(t)+' de '+mmss(total)+' · altura '+Math.round(p.h)+' m'+bat;
+      $('simRange').value=Math.round(t/total*1000); }
+    function frame(ts){ if(!playing) return; var dt=lastTs?(ts-lastTs)/1000:0; lastTs=ts; t=Math.min(total, t+dt*(+$('simSpeed').value||30)); draw();
+      if(t>=total){ playing=false; $('simPlay').textContent='▶'; return; } raf=requestAnimationFrame(frame); }
+    function play(){ if(t>=total) t=0; playing=true; lastTs=0; $('simPlay').textContent='❚❚'; raf=requestAnimationFrame(frame); }
+    function pause(){ playing=false; if(raf) cancelAnimationFrame(raf); $('simPlay').textContent='▶'; }
+    function open(){ if(!lastCalc||!lastCalc.parts.length) return toast('Desenhe a área primeiro');
+      build(); if(!segs.length) return; t=0; document.body.classList.add('sim');
+      if(layer) map.removeLayer(layer); layer=L.layerGroup().addTo(map);
+      swath=L.polyline([],{color:'#ffffff',opacity:.28,lineCap:'butt',lineJoin:'miter',interactive:false}).addTo(layer);
+      trail=L.polyline([],{color:'#ffffff',weight:3,dashArray:'1 6',interactive:false}).addTo(layer);
+      foot=L.polygon([],{color:'#ffd21f',weight:2,fillColor:'#ffd21f',interactive:false}).addTo(layer);
+      drone=L.marker([home?home.lat:lastCalc.parts[0].wps[0].lat, home?home.lon:lastCalc.parts[0].wps[0].lon],{icon:L.divIcon({className:'',iconSize:[34,34],iconAnchor:[17,17],
+        html:'<svg class="drone" viewBox="0 0 34 34"><circle cx="17" cy="17" r="15" fill="#ff6a1f" stroke="#fff" stroke-width="2.5"/><path d="M17 6l7 16-7-4-7 4z" fill="#fff"/></svg>'}),interactive:false,zIndexOffset:2000}).addTo(layer);
+      var b=L.latLngBounds(lastCalc.parts.reduce(function(a,p){return a.concat(p.wps.map(function(q){return [q.lat,q.lon];}));},home?[[home.lat,home.lon]]:[])); map.fitBounds(b,{paddingTopLeft:[30,30],paddingBottomRight:[70,($('simBar').offsetHeight||110)+20],maxZoom:19});
+      fade(true);
+      draw(); play(); }
+    function fade(on){ if(wpLayer) wpLayer.eachLayer(function(l){ if(l.setStyle) l.setStyle({opacity:on?0.3:(l.options.dashArray&&l.options.weight===2?1:(l.options._op||1))}); }); }
+    function close(){ pause(); document.body.classList.remove('sim'); if(layer){ map.removeLayer(layer); layer=null; } compute(); }
+    function seek(v){ t=v/1000*total; draw(); }
+    map.on('zoomend',function(){ if(document.body.classList.contains('sim')) draw(); });
+    return {open:open, close:close, play:play, pause:pause, seek:seek, active:function(){return document.body.classList.contains('sim');}, isPlaying:function(){return playing;}, rebuild:function(){ if(document.body.classList.contains('sim')){ build(); t=Math.min(t,total); fade(true); draw(); } }};
+  })();
+  $('bSim').onclick=function(){ window.scrollTo(0,0); Sim.open(); };
+  $('bSimMap').onclick=function(e){ e.stopPropagation(); if(Sim.active()) Sim.close(); else Sim.open(); };
+  L.DomEvent.disableClickPropagation($('bSimMap')); L.DomEvent.disableClickPropagation($('simBar')); L.DomEvent.disableScrollPropagation($('simBar'));
+  $('simPlay').onclick=function(){ if(Sim.isPlaying()) Sim.pause(); else Sim.play(); };
+  $('simClose').onclick=function(){ Sim.close(); };
+  $('simRange').addEventListener('input',function(){ Sim.seek(+this.value); });
   $('parts').addEventListener('click',function(e){ var b=e.target.closest('button[data-part]'); if(!b) return;
     var i=+b.dataset.part, o=opts(), d=0, gx=$('gimbalX').value;
     var wps=parts[i].wps.map(function(q){ return {lat:q.lat, lon:q.lon, alt:q.alt, gp:(q.pass>0 && gx!=='same') ? +gx : o.gimbal}; });
@@ -778,13 +881,13 @@ if (typeof module!=='undefined') module.exports=Core;
     download(fname()+'_GoogleEarth.kml', Core.stdKml(fname(),fixed?hull(fixed):poly,last.wps,home,opts().alt)); };
   function addAt(p){ if(mode==='home'){ home=p; setMode('area'); } else if(fixed){ fixed.push(p); } else { poly.push(p); } redraw(); }
   var suppressClick=false;
-  map.on('click',function(e){ if(suppressClick) return; addAt({lat:e.latlng.lat,lon:e.latlng.lng}); });
+  map.on('click',function(e){ if(suppressClick || Sim.active()) return; addAt({lat:e.latlng.lat,lon:e.latlng.lng}); });
   // Segurar o dedo ~0,45 s: lupa aparece, desliza até o ponto e solta para marcar.
   (function(){ var cont=map.getContainer(), lp={timer:null,active:false,x:0,y:0,ptrs:0};
     function llAt(e){ var r=cont.getBoundingClientRect(); return map.containerPointToLatLng(L.point(e.clientX-r.left,e.clientY-r.top)); }
     function cancel(){ clearTimeout(lp.timer); lp.timer=null; if(lp.active){ lp.active=false; loupe.stop(); map.dragging.enable(); } }
     cont.addEventListener('pointerdown',function(e){ lp.ptrs++; if(lp.ptrs>1){ cancel(); return; }
-      if(e.target.closest('.leaflet-marker-icon,.leaflet-control,.tools,#nomap,#bFs')) return;
+      if(Sim.active() || e.target.closest('.leaflet-marker-icon,.leaflet-control,.tools,#nomap,#bFs,#bSimMap,#simBar')) return;
       lp.x=e.clientX; lp.y=e.clientY; var ev=e;
       lp.timer=setTimeout(function(){ lp.timer=null; lp.active=true; map.dragging.disable(); if(navigator.vibrate) try{navigator.vibrate(15);}catch(_){} loupe.move(llAt(ev)); },450); });
     window.addEventListener('pointermove',function(e){
