@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<meta name="theme-color" content="#13212b">
+<meta name="theme-color" content="#0d2747">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
-<title>Rota em grade FIMI</title>
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Fimapa</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <style>
 /* VOICE: ferramenta de campo, direta
@@ -19,8 +19,8 @@
 :root{color-scheme:light dark;--bg:light-dark(#f3f5f6,#0d1418);--card:light-dark(#fff,#16222a);--ink:light-dark(#13212b,#e7eef2);--mut:light-dark(#5b6b75,#93a5b0);--line:light-dark(#dbe2e6,#26363f);--acc:#ff5a1f;--sup:light-dark(#0f6e78,#4fc0cb);--warn:light-dark(#b42318,#ff8a7a)}
 *{box-sizing:border-box;min-width:0}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow-x:clip}
-header{display:flex;align-items:center;gap:8px;padding:8px 14px;background:#13212b;color:#fff}
-header b{font-size:17px}header span{color:#9fb3bf;font-size:13px}
+header{display:flex;align-items:center;gap:8px;padding:8px 14px;background:#0d2747;color:#fff}
+header b{font-size:17px}header span{color:#9fc4ff;font-size:13px}
 #mapwrap{position:relative;height:56vh;min-height:300px}
 #map{position:absolute;inset:0}
 .tools{position:absolute;z-index:500;left:8px;right:8px;bottom:8px;display:flex;flex-wrap:wrap;gap:6px}
@@ -97,7 +97,7 @@ body.leaflet-dragging #map.leaflet-grab,body.leaflet-dragging #map .leaflet-inte
 </style>
 </head>
 <body>
-<header><b>Rota em grade</b><span>FIMI X8 Tele Max · FIMI Navi 3.0</span><span id="net" style="margin-left:auto;display:none;background:#ff5a1f;color:#fff;border-radius:10px;padding:2px 8px;font-size:12px">Offline</span></header>
+<header><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgdmlld0JveD0iMCAwIDUxMiA1MTIiPjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iIzJmOTVmZiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzBiNGZkOCIvPjwvbGluZWFyR3JhZGllbnQ+PGNsaXBQYXRoIGlkPSJjIj48cmVjdCB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgcng9IjExNCIvPjwvY2xpcFBhdGg+PC9kZWZzPjxyZWN0IHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiByeD0iMTE0IiBmaWxsPSJ1cmwoI2cpIi8+PGcgY2xpcC1wYXRoPSJ1cmwoI2MpIj48cGF0aCBkPSJNNjQgMFY1MTJNMCA2NEg1MTIiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4wOSIgc3Ryb2tlLXdpZHRoPSIzIi8+PHBhdGggZD0iTTEyOCAwVjUxMk0wIDEyOEg1MTIiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4wOSIgc3Ryb2tlLXdpZHRoPSIzIi8+PHBhdGggZD0iTTE5MiAwVjUxMk0wIDE5Mkg1MTIiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4wOSIgc3Ryb2tlLXdpZHRoPSIzIi8+PHBhdGggZD0iTTI1NiAwVjUxMk0wIDI1Nkg1MTIiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4wOSIgc3Ryb2tlLXdpZHRoPSIzIi8+PHBhdGggZD0iTTMyMCAwVjUxMk0wIDMyMEg1MTIiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4wOSIgc3Ryb2tlLXdpZHRoPSIzIi8+PHBhdGggZD0iTTM4NCAwVjUxMk0wIDM4NEg1MTIiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4wOSIgc3Ryb2tlLXdpZHRoPSIzIi8+PHBhdGggZD0iTTQ0OCAwVjUxMk0wIDQ0OEg1MTIiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4wOSIgc3Ryb2tlLXdpZHRoPSIzIi8+PC9nPjxnIGZpbGw9Im5vbmUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+CiAgICAgIDxwYXRoIGQ9Ik0xODAgMzg0VjEzMkgzNTAiIHN0cm9rZT0iIzBhM2E5ZSIgc3Ryb2tlLW9wYWNpdHk9Ii4zNSIgc3Ryb2tlLXdpZHRoPSI1NCIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNiA4KSIvPgogICAgICA8cGF0aCBkPSJNMTgwIDI1NEgzMTgiIHN0cm9rZT0iIzBhM2E5ZSIgc3Ryb2tlLW9wYWNpdHk9Ii4zNSIgc3Ryb2tlLXdpZHRoPSI1NCIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNiA4KSIvPgogICAgICA8cGF0aCBkPSJNMTgwIDM4NFYxMzJIMzUwIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iNTAiLz4KICAgICAgPHBhdGggZD0iTTE4MCAyNTRIMzE4IiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iNTAiLz4KICAgICAgPHBhdGggZD0iTTI0OCAzMThIMzYwIiBzdHJva2U9IiNmZmYiIHN0cm9rZS1vcGFjaXR5PSIuNTUiIHN0cm9rZS13aWR0aD0iMTAiIHN0cm9rZS1kYXNoYXJyYXk9IjIgMjIiLz4KICAgIDwvZz4KICAgIDxjaXJjbGUgY3g9IjM1MCIgY3k9IjEzMiIgcj0iMzEiIGZpbGw9IiNmZmYiLz48Y2lyY2xlIGN4PSIzNTAiIGN5PSIxMzIiIHI9IjEzIiBmaWxsPSIjMTQ2M2YwIi8+CiAgICA8Y2lyY2xlIGN4PSIzMTgiIGN5PSIyNTQiIHI9IjMxIiBmaWxsPSIjZmZmIi8+PGNpcmNsZSBjeD0iMzE4IiBjeT0iMjU0IiByPSIxMyIgZmlsbD0iIzE0NjNmMCIvPgogICAgPGNpcmNsZSBjeD0iMTgwIiBjeT0iMzg0IiByPSIzNiIgZmlsbD0iI2ZmNmExZiIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjEyIi8+PC9zdmc+" alt="" width="30" height="30" style="border-radius:7px;flex:none"><b style="font-size:19px;letter-spacing:-.3px">fimapa</b><span>rotas para ortofoto · FIMI Navi</span><span id="net" style="margin-left:auto;display:none;background:#ff5a1f;color:#fff;border-radius:10px;padding:2px 8px;font-size:12px">Offline</span></header>
 
 <div id="mapwrap">
   <div id="map"></div>
@@ -704,6 +704,7 @@ if (typeof module!=='undefined') module.exports=Core;
       try{ localStorage.setItem(PKEY,JSON.stringify(p)); }catch(e){} projList(''); toast('Projeto excluído'); }); };
 
   // ======================= Relatório =======================
+  var LOGO='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgdmlld0JveD0iMCAwIDUxMiA1MTIiPjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iIzJmOTVmZiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzBiNGZkOCIvPjwvbGluZWFyR3JhZGllbnQ+PGNsaXBQYXRoIGlkPSJjIj48cmVjdCB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgcng9IjExNCIvPjwvY2xpcFBhdGg+PC9kZWZzPjxyZWN0IHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiByeD0iMTE0IiBmaWxsPSJ1cmwoI2cpIi8+PGcgY2xpcC1wYXRoPSJ1cmwoI2MpIj48cGF0aCBkPSJNNjQgMFY1MTJNMCA2NEg1MTIiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4wOSIgc3Ryb2tlLXdpZHRoPSIzIi8+PHBhdGggZD0iTTEyOCAwVjUxMk0wIDEyOEg1MTIiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4wOSIgc3Ryb2tlLXdpZHRoPSIzIi8+PHBhdGggZD0iTTE5MiAwVjUxMk0wIDE5Mkg1MTIiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4wOSIgc3Ryb2tlLXdpZHRoPSIzIi8+PHBhdGggZD0iTTI1NiAwVjUxMk0wIDI1Nkg1MTIiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4wOSIgc3Ryb2tlLXdpZHRoPSIzIi8+PHBhdGggZD0iTTMyMCAwVjUxMk0wIDMyMEg1MTIiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4wOSIgc3Ryb2tlLXdpZHRoPSIzIi8+PHBhdGggZD0iTTM4NCAwVjUxMk0wIDM4NEg1MTIiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4wOSIgc3Ryb2tlLXdpZHRoPSIzIi8+PHBhdGggZD0iTTQ0OCAwVjUxMk0wIDQ0OEg1MTIiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4wOSIgc3Ryb2tlLXdpZHRoPSIzIi8+PC9nPjxnIGZpbGw9Im5vbmUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+CiAgICAgIDxwYXRoIGQ9Ik0xODAgMzg0VjEzMkgzNTAiIHN0cm9rZT0iIzBhM2E5ZSIgc3Ryb2tlLW9wYWNpdHk9Ii4zNSIgc3Ryb2tlLXdpZHRoPSI1NCIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNiA4KSIvPgogICAgICA8cGF0aCBkPSJNMTgwIDI1NEgzMTgiIHN0cm9rZT0iIzBhM2E5ZSIgc3Ryb2tlLW9wYWNpdHk9Ii4zNSIgc3Ryb2tlLXdpZHRoPSI1NCIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNiA4KSIvPgogICAgICA8cGF0aCBkPSJNMTgwIDM4NFYxMzJIMzUwIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iNTAiLz4KICAgICAgPHBhdGggZD0iTTE4MCAyNTRIMzE4IiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iNTAiLz4KICAgICAgPHBhdGggZD0iTTI0OCAzMThIMzYwIiBzdHJva2U9IiNmZmYiIHN0cm9rZS1vcGFjaXR5PSIuNTUiIHN0cm9rZS13aWR0aD0iMTAiIHN0cm9rZS1kYXNoYXJyYXk9IjIgMjIiLz4KICAgIDwvZz4KICAgIDxjaXJjbGUgY3g9IjM1MCIgY3k9IjEzMiIgcj0iMzEiIGZpbGw9IiNmZmYiLz48Y2lyY2xlIGN4PSIzNTAiIGN5PSIxMzIiIHI9IjEzIiBmaWxsPSIjMTQ2M2YwIi8+CiAgICA8Y2lyY2xlIGN4PSIzMTgiIGN5PSIyNTQiIHI9IjMxIiBmaWxsPSIjZmZmIi8+PGNpcmNsZSBjeD0iMzE4IiBjeT0iMjU0IiByPSIxMyIgZmlsbD0iIzE0NjNmMCIvPgogICAgPGNpcmNsZSBjeD0iMTgwIiBjeT0iMzg0IiByPSIzNiIgZmlsbD0iI2ZmNmExZiIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjEyIi8+PC9zdmc+';
   function mercX(lon,z){ return (lon+180)/360*256*Math.pow(2,z); }
   function mercY(lat,z){ var r=lat*Math.PI/180; return (1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*256*Math.pow(2,z); }
   function mapImage(){ var c=lastCalc; var pts=(fixed||poly).concat(home?[home]:[]).concat(gcps); c.parts.forEach(function(p){ pts=pts.concat(p.wps); });
@@ -752,7 +753,8 @@ if (typeof module!=='undefined') module.exports=Core;
       'Execute a rota e mantenha o drone sempre à vista. Vento forte, chuva ou alerta de bateria: pause e traga o drone de volta.',
       'Ao pousar, troque a bateria e abra a próxima rota da lista (cada uma começa onde a anterior terminou).',
       'No final, confira a quantidade de fotos e anote qualquer falha (bateria, faixa, horário).'];
-    return '<h1>Relatório de levantamento – '+escH(name)+'</h1><div class="muted">Gerado em '+now.toLocaleString('pt-BR')+' · FIMI X8 Tele Max · Rota em grade</div>'+
+    return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><img src="'+LOGO+'" alt="" style="width:40px;height:40px;border:0;border-radius:9px"><div><b style="font-size:18px;letter-spacing:-.3px">fimapa</b><div class="muted">rotas para ortofoto</div></div></div>'+
+      '<h1>Relatório de levantamento – '+escH(name)+'</h1><div class="muted">Gerado em '+now.toLocaleString('pt-BR')+' · FIMI X8 Tele Max · Fimapa</div>'+
       (img?'<h2>Mapa</h2><img src="'+img+'" alt="Mapa da área"><div class="muted">Contorno da área, rotas por bateria (número = início de cada bateria), H = decolagem, losangos = pontos de controle.</div>':'')+
       '<h2>Resumo</h2><table>'+rows.join('')+'</table>'+
       (bats?'<h2>Baterias (ordem de voo)</h2><table><tr><th>#</th><th>Direção</th><th>Pontos</th><th>Tempo</th><th>Arquivo</th></tr>'+bats+'</table>':'')+gtab+
@@ -765,7 +767,7 @@ if (typeof module!=='undefined') module.exports=Core;
   window.addEventListener('afterprint',function(){ document.body.classList.remove('printing'); });
   $('bReportHtml').onclick=function(){ buildReport().then(function(html){ if(!html) return;
     var css=[].slice.call(document.styleSheets).map(function(){return '';}).join('');
-    download(fname()+'_relatorio.html','<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Relatório – '+escH(baseName($('name').value)||'Área')+'</title><style>body{margin:16px;font:13px/1.45 system-ui,sans-serif;color:#111;background:#fff;max-width:900px}h1{font-size:20px;margin:0 0 2px}h2{font-size:15px;margin:16px 0 6px;border-bottom:2px solid #13212b;padding-bottom:2px}table{width:100%;border-collapse:collapse}td,th{border:1px solid #bbb;padding:4px 6px;text-align:left;font-size:12.5px}th{background:#eef2f4}img{width:100%;border:1px solid #999}.muted{color:#555;font-size:11px}ol{padding-left:18px}@page{size:A4;margin:12mm}</style></head><body>'+html+'</body></html>'); }); };
+    download(fname()+'_relatorio.html','<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fimapa – relatório – '+escH(baseName($('name').value)||'Área')+'</title><style>body{margin:16px;font:13px/1.45 system-ui,sans-serif;color:#111;background:#fff;max-width:900px}h1{font-size:20px;margin:0 0 2px}h2{font-size:15px;margin:16px 0 6px;border-bottom:2px solid #13212b;padding-bottom:2px}table{width:100%;border-collapse:collapse}td,th{border:1px solid #bbb;padding:4px 6px;text-align:left;font-size:12.5px}th{background:#eef2f4}img{width:100%;border:1px solid #999}.muted{color:#555;font-size:11px}ol{padding-left:18px}@page{size:A4;margin:12mm}</style></head><body>'+html+'</body></html>'); }); };
   $('parts').addEventListener('click',function(e){ var b=e.target.closest('button[data-part]'); if(!b) return;
     var i=+b.dataset.part, o=opts(), d=0, gx=$('gimbalX').value;
     var wps=parts[i].wps.map(function(q){ return {lat:q.lat, lon:q.lon, alt:q.alt, gp:(q.pass>0 && gx!=='same') ? +gx : o.gimbal}; });

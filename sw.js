@@ -1,11 +1,11 @@
-/* Rota em grade – funcionamento offline.
+/* Fimapa – funcionamento offline.
    - App (página e biblioteca do mapa): busca na internet e guarda a última versão; sem internet, usa a guardada.
    - Imagens do mapa: guarda as que você visualizou e usa a cópia quando estiver sem internet.
      Não há download em massa: só fica salvo o que foi visto. */
-var SHELL = 'rg-app-v2';
+var SHELL = 'rg-app-v3';
 var TILES = 'rg-mapa-v1';
 var MAX_TILES = 8000;                       // ~150–250 MB no máximo
-var SHELL_URLS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png',
+var SHELL_URLS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png', './icon-180.png', './icon-maskable-512.png',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'];
 
 function isTile(url){ return /\/MapServer\/tile\/\d+\/\d+\/\d+/.test(url) || /tile\.openstreetmap\.org\/\d+\/\d+\/\d+\.png/.test(url) || /elevation-tiles-prod\/terrarium\/\d+\/\d+\/\d+\.png/.test(url); }
