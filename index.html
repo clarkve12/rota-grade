@@ -80,6 +80,19 @@ body.fs #fsInfo{display:block;position:absolute;z-index:500;top:8px;left:56px;ri
 body.leaflet-dragging #map.leaflet-grab,body.leaflet-dragging #map .leaflet-interactive{cursor:grabbing}
 #map .leaflet-marker-draggable{cursor:move}
 #map .leaflet-control,#map .leaflet-control a,#bFs,.tools button{cursor:pointer}
+.gcp{width:22px;height:22px;background:#8b3dff;border:2px solid #fff;transform:rotate(45deg);border-radius:3px;box-shadow:0 1px 4px rgba(0,0,0,.5)}
+.gcp span{display:block;transform:rotate(-45deg);color:#fff;font:700 10px/18px system-ui;text-align:center}
+#report{display:none}
+@media print{
+  body.printing>*:not(#report){display:none!important}
+  body.printing #report{display:block}
+  @page{size:A4;margin:12mm}
+}
+#report{font:12px/1.4 system-ui,sans-serif;color:#111;background:#fff}
+#report h1{font-size:20px;margin:0 0 2px}#report h2{font-size:14px;margin:14px 0 6px;border-bottom:2px solid #13212b;padding-bottom:2px}
+#report table{width:100%;border-collapse:collapse;margin:4px 0}#report td,#report th{border:1px solid #bbb;padding:3px 6px;text-align:left;font-size:11.5px}
+#report th{background:#eef2f4}#report img{width:100%;border:1px solid #999}#report ol{padding-left:18px}#report li{margin:2px 0}
+#report .muted{color:#555;font-size:10.5px}
 #toast{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);background:#13212b;color:#fff;padding:10px 16px;border-radius:10px;display:none;z-index:1000;max-width:90vw}
 </style>
 </head>
@@ -126,6 +139,35 @@ body.leaflet-dragging #map.leaflet-grab,body.leaflet-dragging #map .leaflet-inte
     <p class="note" id="modeNote"></p>
   </section>
 
+  <section class="card">
+    <h2 style="font-size:17px;margin:0 0 10px">Projetos</h2>
+    <div class="grid">
+      <label class="full">Abrir projeto salvo<select id="projSel"></select></label>
+      <button class="sec" id="bProjSave">Salvar projeto</button>
+      <button class="sec" id="bProjNew">Novo</button>
+      <button class="sec full" id="bProjDel">Excluir projeto selecionado</button>
+    </div>
+    <p class="note">Salva área, H, pontos de controle e todos os ajustes com o nome do projeto. Fica no celular e funciona sem internet.</p>
+  </section>
+
+  <section class="card">
+    <h2 style="font-size:17px;margin:0 0 10px">Pontos de controle (RTK)</h2>
+    <div class="grid">
+      <label class="full">Quantidade<select id="gcpN"><option value="0">Não usar</option><option value="5">5 pontos (4 cantos + centro)</option><option value="7">7 pontos</option><option value="9">9 pontos</option></select></label>
+      <button class="sec" id="bGcpRe">Redistribuir</button>
+      <button class="sec" id="bGcpCsv">Baixar CSV</button>
+      <button class="sec full" id="bGcpKml">Baixar KML dos pontos</button>
+    </div>
+    <p class="note">Posições sugeridas, bem distribuídas na área (arraste para ajustar no mapa). O CSV traz latitude/longitude e UTM (Este/Norte) para importar na controladora do RTK.</p>
+  </section>
+
+  <section class="card">
+    <h2 style="font-size:17px;margin:0 0 10px">Relatório e ficha do operador</h2>
+    <button class="pri" id="bReport">Gerar relatório (PDF)</button>
+    <button class="sec" id="bReportHtml" style="margin-top:8px;width:100%">Baixar relatório (arquivo)</button>
+    <p class="note">Mapa da área, parâmetros, baterias na ordem, pontos de controle e uma ficha passo a passo para quem vai operar o drone. Em "Gerar relatório", escolha <b>Salvar como PDF</b> na tela de impressão.</p>
+  </section>
+
   <details id="adv">
     <summary>Opções avançadas</summary>
     <div class="dbody">
@@ -141,10 +183,10 @@ body.leaflet-dragging #map.leaflet-grab,body.leaflet-dragging #map .leaflet-inte
         <h3>Grade</h3>
         <div class="grid">
           <label>Espaçamento das faixas (m)<input id="spacing" type="number" placeholder="automático" inputmode="decimal"></label>
-          <label>Margem além da área (m)<input id="margin" type="number" value="0" inputmode="numeric"></label>
+          <label>Margem além da área (m)<input id="margin" type="number" placeholder="automática" inputmode="numeric"></label>
           <label class="full">Direção das faixas: <span id="angTxt">automática</span><input id="ang" type="range" min="-1" max="179" value="-1"></label>
         </div>
-        <p class="note">Toda a esquerda = automática (segue o lado mais comprido da área).</p>
+        <p class="note">Direção toda à esquerda = automática (segue o lado mais comprido). Margem vazia = automática: as faixas passam um pouco da borda para as beiradas do mapa saírem completas.</p>
       </div>
       <div>
         <h3>Câmera</h3>
@@ -153,6 +195,8 @@ body.leaflet-dragging #map.leaflet-grab,body.leaflet-dragging #map .leaflet-inte
           <label>FOV horizontal (°)<input id="hfov" type="number" value="68.4" inputmode="decimal"></label>
           <label>FOV vertical (°)<input id="vfov" type="number" value="54" inputmode="decimal"></label>
           <label class="full">Largura da foto (px)<input id="imgw" type="number" value="8064" inputmode="numeric"></label>
+          <label>Gimbal nos pontos<select id="gimbal"><option value="-9000">−90° (para baixo)</option><option value="-7500">−75°</option><option value="-6000">−60°</option><option value="0">Não definir (0°, padrão do app)</option></select></label>
+          <label>Gimbal nas direções extras<select id="gimbalX"><option value="same">Igual</option><option value="-6500">−65° (melhor para 3D)</option></select></label>
         </div>
       </div>
       <div>
@@ -171,6 +215,18 @@ body.leaflet-dragging #map.leaflet-grab,body.leaflet-dragging #map .leaflet-inte
           <label class="full">Reserva de segurança (%)<input id="reserve" type="number" min="10" max="60" value="30" inputmode="numeric"></label>
         </div>
         <p class="note">Cada parte inclui subida, ida, rota, volta e pouso, e cabe no tempo da bateria descontada a reserva.</p>
+        <h3 style="margin-top:12px">Calibrar com um voo real</h3>
+        <div class="grid">
+          <label>Tempo voado (min)<input id="calT" type="number" step="0.5" inputmode="decimal" placeholder="ex.: 12"></label>
+          <label>Bateria gasta (%)<input id="calP" type="number" inputmode="numeric" placeholder="ex.: 55"></label>
+        </div>
+        <button class="sec" id="bCal" style="margin-top:8px">Calibrar</button>
+        <p class="note" id="calInfo"></p>
+      </div>
+      <div>
+        <h3>Relevo</h3>
+        <label>Compensar relevo<select id="terrain"><option value="0">Não (altura fixa em relação à decolagem)</option><option value="1">Sim – ajustar a altura de cada ponto pelo terreno</option></select></label>
+        <p class="note">Usa um modelo de terreno aberto (~30 m, sem árvores nem construções) para avisar sobre desnível e, se ativado, manter a altura sobre o chão. Precisa de internet na primeira vez em cada região.</p>
       </div>
       <div>
         <h3>Mapa offline</h3>
@@ -201,6 +257,7 @@ body.leaflet-dragging #map.leaflet-grab,body.leaflet-dragging #map .leaflet-inte
   </details>
 </main>
 <div id="toast"></div>
+<div id="report"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script id="core">
@@ -231,6 +288,7 @@ var Core = (function(){
     var S=xy.map(function(p){return p.x*n.x+p.y*n.y;}), T=xy.map(function(p){return p.x*d.x+p.y*d.y;});
     var smin=Math.min.apply(null,S), smax=Math.max.apply(null,S), width=smax-smin;
     if(out.area>2e6 || width/out.spacing>300){ out.warns.push('Área grande demais para uma missão ('+(out.area/1e4).toFixed(0)+' ha). Aproxime o mapa e desenhe uma área menor.'); return out; }
+    out.margin = o.margin>=0 ? o.margin : Math.min(25, Math.max(3, fp.l*0.5));
     var k=Math.max(1,Math.ceil((width - 1e-6)/out.spacing)), step=width/k;
     if(width<out.spacing) k=1;
     var segs=[];
@@ -239,7 +297,7 @@ var Core = (function(){
       for(var j=0;j<xy.length;j++){ var j2=(j+1)%xy.length, s1=S[j], s2=S[j2];
         if((s1<=s)!==(s2<=s)){ ts.push(T[j]+(s-s1)/(s2-s1)*(T[j2]-T[j])); } }
       if(ts.length<2) continue;
-      var t0=Math.min.apply(null,ts)-o.margin, t1=Math.max.apply(null,ts)+o.margin;
+      var t0=Math.min.apply(null,ts)-out.margin, t1=Math.max.apply(null,ts)+out.margin;
       segs.push([s,t0,t1]);
     }
     out.lines=segs.length;
@@ -304,7 +362,7 @@ var Core = (function(){
     var f=[], add=function(k,v){ f.push('<Point '+k+'="'+k+'"><'+k+'>'+v+'</'+k+'></Point>'); };
     var pms = wps.map(function(p,i){ f=[];
       add('number',i); add('totalnumber',wps.length); add('longitude',p.lon.toFixed(8)); add('latitude',p.lat.toFixed(8));
-      add('altitude',Math.round(o.alt)); add('yaw','0.0'); add('gimbalPitch',0); add('speed',Math.round(o.speed*10));
+      add('altitude',Math.round(p.alt!=null?p.alt:o.alt)); add('yaw','0.0'); add('gimbalPitch',Math.round(p.gp!=null?p.gp:(o.gimbal||0))); add('speed',Math.round(o.speed*10));
       add('yawMode',o.yaw); add('gimbalMode',0); add('trajectoryMode',0); add('missionFinishAction',0); add('rCLostAction',0);
       add('longitudePOI','0.0'); add('latitudePOI','0.0'); add('altitudePOI',0); add('pointActionCmd',o.photo==='wp'?4:0); add('roration',0);
       return '<Placemark><Snippet></Snippet><styleUrl>#IconStyle00</styleUrl>'+f.join('')+'</Placemark>'; });
@@ -337,11 +395,11 @@ if (typeof module!=='undefined') module.exports=Core;
 {
   if(typeof L==='undefined'){ document.getElementById('nomap').textContent='A biblioteca do mapa não carregou. Verifique a internet e recarregue a página.'; document.getElementById('nomap').style.display='flex'; throw new Error('Leaflet ausente'); }
   var $ = function(id){ return document.getElementById(id); };
-  var FIELDS=['name','alt','spd','passes','join','photo','side','front','spacing','margin','ang','cam','hfov','vfov','imgw','end','lost','yaw','maptype','bat','reserve'];
+  var FIELDS=['name','alt','spd','passes','join','gimbal','gimbalX','terrain','gcpN','photo','side','front','spacing','margin','ang','cam','hfov','vfov','imgw','end','lost','yaw','maptype','bat','reserve'];
   var CAMS={telemax:{hfov:68.4,vfov:54,imgw:8064}};
   var MAXD=1000, MIN_INT=2, KEY='fimiGrade3';
   // poly: cantos da área (modo grade). fixed: pontos importados de um KML do FIMI (modo pontos), ou null.
-  var poly=[], fixed=null, home=null, mode='area', vMarks=[], wpLayer=null, polyLayer=null, homeMark=null, last=null, parts=[];
+  var gcps=[], lastCalc=null, poly=[], fixed=null, home=null, mode='area', vMarks=[], wpLayer=null, polyLayer=null, homeMark=null, last=null, parts=[];
   var map = L.map('map',{zoomControl:true}).setView([-15.78,-47.93],4);
   var sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?blankTile=false',{maxZoom:21,maxNativeZoom:19,attribution:'Esri',crossOrigin:true}).addTo(map);
   // Onde não há foto no zoom pedido, o servidor responde 404: baixa o zoom nativo e amplia a última foto disponível.
@@ -382,14 +440,16 @@ if (typeof module!=='undefined') module.exports=Core;
   function applyCam(){ var c=CAMS[$('cam').value]; ['hfov','vfov','imgw'].forEach(function(k){ $(k).disabled=!!c; if(c) $(k).value=c[k]; }); }
   function opts(){ var n=function(id){return parseFloat($(id).value);};
     return { alt:Math.min(120,Math.max(10,n('alt')||30)), speed:Math.min(10,Math.max(1,n('spd')||3)), hfov:n('hfov')||68.4, vfov:n('vfov')||54, imgw:n('imgw')||8064,
-      side:isNaN(n('side'))?70:n('side'), front:isNaN(n('front'))?75:n('front'), spacing:n('spacing')||0, margin:n('margin')||0, photo:$('photo').value,
+      side:isNaN(n('side'))?70:n('side'), front:isNaN(n('front'))?75:n('front'), spacing:n('spacing')||0, margin:($('margin').value.trim()===''||isNaN(n('margin')))?-1:Math.max(0,n('margin')), photo:$('photo').value,
       bearing:parseInt($('ang').value,10), home:home, maxd:MAXD, yaw:+$('yaw').value, end:+$('end').value, lost:+$('lost').value, maptype:+$('maptype').value,
-      batMin:n('bat')||29, reserve:Math.min(60,Math.max(10,isNaN(n('reserve'))?30:n('reserve'))) }; }
+      gimbal:+$('gimbal').value||0, batMin:($('bat').value==='cal'&&batCal())?batCal().min:(n('bat')||29), reserve:Math.min(60,Math.max(10,isNaN(n('reserve'))?30:n('reserve'))) }; }
   function fieldVals(){ return FIELDS.reduce(function(a,k){a[k]=$(k).value;return a;},{}); }
-  function state(){ return {v:1, poly:poly, fixed:fixed, home:home, f:fieldVals()}; }
+  function state(){ return {v:2, poly:poly, fixed:fixed, home:home, gcps:gcps, f:fieldVals()}; }
   function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state())); }catch(e){} }
   function load(st, keepSpeedAlt){
-    poly=st.poly||[]; fixed=st.fixed||null; home=st.home||null;
+    poly=st.poly||[]; fixed=st.fixed||null; home=st.home||null; gcps=st.gcps||[];
+    if((st.v||1)<2 && st.f && st.f.margin==='0') st.f.margin='';   // antes "0" era o padrão; agora vazio = automática
+    if(st.f && st.f.bat==='cal' && !batCal()) st.f.bat='29';
     Object.keys(st.f||{}).forEach(function(k){ if($(k) && !(keepSpeedAlt && (k==='alt'||k==='spd'))) $(k).value=st.f[k]; });
     $('name').value=baseName($('name').value);
     applyCam(); setMode('area');
@@ -403,6 +463,8 @@ if (typeof module!=='undefined') module.exports=Core;
     if(fixed) fixed.forEach(function(p,i){ var m=L.marker([p.lat,p.lon],{icon:icon('wp',i+1,20),draggable:true}).addTo(map);
       withLoupe(m,function(ll){ fixed[i]={lat:ll.lat,lon:ll.lng}; compute(); });
       m.bindPopup('<button data-del="'+i+'" style="min-height:40px">Excluir ponto '+(i+1)+'</button>'); vMarks.push(m); });
+    gcps.forEach(function(g,i){ var m=L.marker([g.lat,g.lon],{icon:icon('gcp','<span>'+(i+1)+'</span>',22),draggable:true,zIndexOffset:500}).addTo(map);
+      withLoupe(m,function(ll){ gcps[i]={lat:ll.lat,lon:ll.lng}; }, function(){ save(); }); vMarks.push(m); });
     if(homeMark){map.removeLayer(homeMark);homeMark=null;}
     if(home){ homeMark=L.marker([home.lat,home.lon],{icon:icon('hm','H',26),draggable:true,zIndexOffset:1000}).addTo(map);
       withLoupe(homeMark,null,function(ll){ home={lat:ll.lat,lon:ll.lng}; compute(); }); }
@@ -427,6 +489,8 @@ if (typeof module!=='undefined') module.exports=Core;
     if(npass>1 && r.wps.length){ (npass===2?[90]:[90,45]).forEach(function(d){
       var prev=routes[routes.length-1].wps, start = joined && prev.length ? prev[prev.length-1] : o.home;  // contínua: começa pela ponta mais perto de onde a anterior terminou
       var rr=Core.build(poly, Object.assign({},o,{bearing:Math.round((r.bearing+d)%180), home:start})); routes.push({wps:rr.wps, ang:rr.bearing}); }); }
+    routes.forEach(function(rt,pi){ rt.wps = rt.wps.map(function(q){ return {lat:q.lat, lon:q.lon, pass:pi}; }); });
+    var terr = terrainStep(o, routes);
     var angles = routes.map(function(rt){return rt.ang;});
     if(joined){ var all=[]; routes.forEach(function(rt){ rt.wps.forEach(function(q){ if(!all.length || Core.hav(all[all.length-1],q)>=10) all.push(q); }); }); routes=[{wps:all, ang:null}]; }
     parts=[]; routes.forEach(function(rt,pi){ if(rt.wps.length<2) return; var sp=Core.splitBalanced(rt.wps, home, o, usable); sp.forEach(function(seg){ parts.push({wps:seg, pass:pi, ang:rt.ang}); }); });
@@ -437,14 +501,16 @@ if (typeof module!=='undefined') module.exports=Core;
     var total = parts.reduce(function(a,p){return a+Core.missionTime(p.wps,home,o);},0), totPts=routes.reduce(function(a,rt){return a+rt.wps.length;},0);
     $('sBat').textContent = parts.length; $('sTime').textContent = fmtMin(total);
     $('sArea').textContent = fixed ? '–' : (r.area/10000).toFixed(2)+' ha'; $('sPts').textContent = totPts;
-    var w=r.warns.slice(), tips='';
+    var w=r.warns.slice().concat(terr.warns), tips='';
     if(r.wps.length && !fixed){
       tips = r.lines+' faixas a cada '+r.spacing.toFixed(0)+' m · resolução ≈ '+r.gsd.toFixed(1)+' cm/px · ';
-      tips += o.photo==='wp' ? 'foto em cada ponto' : 'foto por intervalo a cada <b>'+Math.max(0.5,Math.floor(r.interval*2)/2)+' s</b> (gimbal em −90°)';
+      tips += o.photo==='wp' ? 'foto em cada ponto' : 'foto por intervalo a cada <b>'+Math.max(0.5,Math.floor(r.interval*2)/2)+' s</b>';
+      tips += ' · margem '+Math.round(r.margin)+' m'+(o.gimbal?' · gimbal '+(o.gimbal/100)+'° automático':'');
       if(o.photo==='interval' && r.interval<MIN_INT) w.push('Intervalo de foto abaixo de '+MIN_INT+' s. Reduza a velocidade para '+Math.floor(r.photoDist/MIN_INT*2)/2+' m/s ou suba a altura.');
     }
     if(npass>1 && parts.length) tips += '<br>Direções: '+angles.map(function(a,i){return (i+1)+'ª '+Math.round(a)+'°';}).join(' · ')+(joined?' em sequência, numa rota contínua.':' (tracejado = direções extras).');
     if(parts.length) tips += (tips?'<br>':'')+'Cada bateria: até '+fmtMin(usable)+' de voo ('+o.reserve+'% de reserva sobre '+o.batMin+' min).';
+    if(terr.text) tips += (tips?'<br>':'')+terr.text;
     $('tips').innerHTML = tips;
     $('modeNote').textContent = fixed ? 'Editando pontos de um KML do FIMI: arraste, toque num ponto para excluir ou toque no mapa para adicionar no fim.' : '';
     $('warns').innerHTML = w.map(function(t){return '<li>'+t.replace(/</g,'&lt;')+'</li>';}).join('');
@@ -453,6 +519,9 @@ if (typeof module!=='undefined') module.exports=Core;
       parts.map(function(p,i){ return '<button class="pri" data-part="'+i+'"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:8px;border:2px solid #fff;vertical-align:-1px;background:'+colors[i%colors.length]+'"></span>'+(n>1?'Bateria '+(i+1)+' de '+n+(npass>1&&!joined?' · direção '+(p.pass+1):'')+' · ':'Baixar KML para o FIMI · ')+fmtMin(Core.missionTime(p.wps,home,o))+'</button>'; }).join('');
     $('fsInfo').innerHTML = (parts.length ? '<b>'+parts.length+(parts.length>1?' baterias':' bateria')+' · '+fmtMin(total)+' · '+totPts+' pontos</b><br>' : '')+$('hint').textContent;
     $('nameHint').textContent = !n ? '' : (n>1 ? 'Arquivos: '+fname()+partSuffix(0)+'.kml … '+partSuffix(n-1)+'.kml' : 'Arquivo: '+fname()+'.kml');
+    lastCalc = {o:o, r:r, parts:parts, angles:angles, npass:npass, joined:joined, total:total, totPts:totPts, terr:terr, usable:usable};
+    if(+$('gcpN').value>0 && !gcps.length && (poly.length>=3 || (fixed&&fixed.length>=3)) && !compute._gcpBusy){ compute._gcpBusy=true; setTimeout(function(){ genGcps(); compute._gcpBusy=false; },0); }
+    if(!+$('gcpN').value && gcps.length){ setTimeout(function(){ gcps=[]; redraw(); },0); }
     save();
   }
   // Nome do arquivo = projeto + data/hora. A data é fixada no 1º download e vale para todas as partes da mesma rota.
@@ -512,8 +581,194 @@ if (typeof module!=='undefined') module.exports=Core;
     d.innerHTML='<div class="card" style="max-width:420px;width:100%"><p style="margin:0 0 12px">'+msg+'</p><button class="pri" id="cbA">'+a+'</button><button class="sec" id="cbB" style="margin-top:8px">'+b+'</button></div>';
     document.body.appendChild(d); d.querySelector('#cbA').onclick=function(){d.remove();res(false);}; d.querySelector('#cbB').onclick=function(){d.remove();res(true);}; }); }
 
+  // ======================= Calibração da bateria =======================
+  function batCal(){ try{ return JSON.parse(localStorage.getItem('fimiBatCal')||'null'); }catch(e){ return null; } }
+  function calUI(){ var c=batCal(), sel=$('bat'), op=sel.querySelector('option[value="cal"]');
+    if(c){ if(!op){ op=document.createElement('option'); op.value='cal'; sel.appendChild(op); } op.textContent='Calibrada com voo real (≈'+c.min.toFixed(1)+' min)';
+      $('calInfo').textContent='Última calibração: '+c.t+' min de voo gastaram '+c.p+'% → bateria cheia ≈ '+c.min.toFixed(1)+' min ('+new Date(c.d).toLocaleDateString('pt-BR')+').'; }
+    else { if(op) op.remove(); $('calInfo').textContent='Depois de um voo de mapeamento, informe quanto tempo voou e quanto da bateria gastou (ex.: 100% → 45% = 55%).'; } }
+  $('bCal').onclick=function(){ var t=parseFloat($('calT').value), pc=parseFloat($('calP').value);
+    if(!(t>0) || !(pc>=10 && pc<=100)) return toast('Informe o tempo (min) e a bateria gasta (10 a 100%)');
+    var c={t:t, p:pc, min:t/(pc/100), d:Date.now()}; try{ localStorage.setItem('fimiBatCal',JSON.stringify(c)); }catch(e){}
+    calUI(); $('bat').value='cal'; compute(); toast('Bateria calibrada: ≈'+c.min.toFixed(1)+' min por carga'); };
+
+  // ======================= Relevo (Terrain Tiles, Mapzen/AWS) =======================
+  var Elev=(function(){ var Z=13, data={}, busy={}, failed={};
+    function txy(lat,lon){ var n=Math.pow(2,Z), r=lat*Math.PI/180; return {x:(lon+180)/360*n, y:(1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*n}; }
+    function need(pts){ var ks={}; pts.forEach(function(p){ var t=txy(p.lat,p.lon); ks[Math.floor(t.x)+'/'+Math.floor(t.y)]=1; });
+      // inclui os blocos entre os extremos
+      var xs=[],ys=[]; Object.keys(ks).forEach(function(k){ var a=k.split('/'); xs.push(+a[0]); ys.push(+a[1]); });
+      var out=[]; for(var x=Math.min.apply(null,xs); x<=Math.max.apply(null,xs); x++) for(var y=Math.min.apply(null,ys); y<=Math.max.apply(null,ys); y++) out.push(x+'/'+y); return out; }
+    function fetchTile(k){ if(data[k]||busy[k]) return busy[k]||Promise.resolve(); var a=k.split('/');
+      busy[k]=fetch('https://s3.amazonaws.com/elevation-tiles-prod/terrarium/'+Z+'/'+a[0]+'/'+a[1]+'.png',{mode:'cors'})
+        .then(function(r){ if(!r.ok) throw new Error('http'); return r.blob(); }).then(function(b){ return createImageBitmap(b); })
+        .then(function(img){ var c=document.createElement('canvas'); c.width=256; c.height=256; var g=c.getContext('2d'); g.drawImage(img,0,0); data[k]=g.getImageData(0,0,256,256).data; delete busy[k]; delete failed[k]; })
+        .catch(function(){ delete busy[k]; failed[k]=Date.now(); });
+      return busy[k]; }
+    function status(pts){ var ks=need(pts); if(ks.length>16) return 'grande';
+      if(ks.every(function(k){return data[k];})) return 'ok';
+      if(ks.some(function(k){return busy[k];})) return 'carregando';
+      if(ks.some(function(k){return failed[k] && Date.now()-failed[k]<30000;})) return 'falhou';
+      return 'carregar'; }
+    function ensure(pts){ return Promise.all(need(pts).map(fetchTile)); }
+    function at(lat,lon){ var t=txy(lat,lon), k=Math.floor(t.x)+'/'+Math.floor(t.y), d=data[k]; if(!d) return null;
+      var px=Math.min(255,Math.floor((t.x-Math.floor(t.x))*256)), py=Math.min(255,Math.floor((t.y-Math.floor(t.y))*256)), i=(py*256+px)*4;
+      return d[i]*256 + d[i+1] + d[i+2]/256 - 32768; }
+    return {status:status, ensure:ensure, at:at}; })();
+  function inPoly(pt, pl){ var c=false; for(var i=0,j=pl.length-1;i<pl.length;j=i++){ var a=pl[i], b=pl[j];
+    if(((a.lat>pt.lat)!==(b.lat>pt.lat)) && (pt.lon < (b.lon-a.lon)*(pt.lat-a.lat)/(b.lat-a.lat)+a.lon)) c=!c; } return c; }
+  function densify(w, maxSeg){ var out=[]; w.forEach(function(q,i){ if(i){ var a=w[i-1], d=Core.hav(a,q), n=Math.floor(d/maxSeg);
+      for(var k=1;k<=n;k++){ var f=k/(n+1); out.push({lat:a.lat+(q.lat-a.lat)*f, lon:a.lon+(q.lon-a.lon)*f, pass:q.pass}); } } out.push(q); }); return out; }
+  var terrLoading=false;
+  function terrainStep(o, routes){
+    var res={warns:[], text:'', ref:null, min:null, max:null, comp:false};
+    var shape=fixed||poly; if(shape.length<2) return res;
+    var pts=shape.concat(home?[home]:[]), st=Elev.status(pts);
+    if(st==='grande'){ res.text='Relevo: área grande demais para a análise automática.'; return res; }
+    if(st!=='ok'){
+      if(st==='carregar' || st==='carregando'){ res.text='Relevo: analisando…'; if(!terrLoading){ terrLoading=true; Elev.ensure(pts).then(function(){ terrLoading=false; compute(); }); } }
+      else res.text = navigator.onLine ? 'Relevo: não foi possível obter os dados agora.' : 'Relevo: sem internet e sem dados salvos desta região.';
+      if($('terrain').value==='1') res.warns.push('Compensação de relevo ainda não aplicada: os dados do terreno não estão disponíveis.');
+      return res; }
+    // amostra o terreno dentro da área
+    var la=shape.map(function(q){return q.lat;}), lo=shape.map(function(q){return q.lon;}), mn=1e9, mx=-1e9, n=14;
+    var lat0=Math.min.apply(null,la), lat1=Math.max.apply(null,la), lon0=Math.min.apply(null,lo), lon1=Math.max.apply(null,lo), area=fixed?null:poly;
+    for(var i=0;i<=n;i++) for(var j=0;j<=n;j++){ var q={lat:lat0+(lat1-lat0)*i/n, lon:lon0+(lon1-lon0)*j/n}; if(area && area.length>=3 && !inPoly(q,area)) continue; var e=Elev.at(q.lat,q.lon); if(e!==null){ mn=Math.min(mn,e); mx=Math.max(mx,e); } }
+    shape.forEach(function(q){ var e=Elev.at(q.lat,q.lon); if(e!==null){ mn=Math.min(mn,e); mx=Math.max(mx,e); } });
+    if(mn>mx) return res;
+    var ref = home ? Elev.at(home.lat,home.lon) : null; var refTxt = ref!==null ? 'decolagem '+Math.round(ref)+' m' : 'marque o H para comparar com a decolagem';
+    if(ref===null) ref=mn;
+    res.ref=ref; res.min=mn; res.max=mx;
+    var above=mx-ref, below=mn-ref;
+    res.text='Relevo: área de '+Math.round(mn)+' a '+Math.round(mx)+' m (desnível '+Math.round(mx-mn)+' m) · '+refTxt+'.';
+    if($('terrain').value==='1'){
+      res.comp=true; var amin=1e9, amax=-1e9;
+      routes.forEach(function(rt){ rt.wps = densify(rt.wps, 45); rt.wps.forEach(function(q){ var e=Elev.at(q.lat,q.lon); if(e===null) e=ref;
+        q.alt=Math.max(10, Math.min(500, Math.round(o.alt + (e-ref)))); amin=Math.min(amin,q.alt); amax=Math.max(amax,q.alt); }); });
+      res.text+=' Altura ajustada ponto a ponto: '+amin+' a '+amax+' m em relação à decolagem (≈'+o.alt+' m sobre o chão).';
+      if(amax-o.alt>60) res.warns.push('Com a compensação, alguns pontos ficam '+(amax-o.alt)+' m acima da decolagem: confira o limite de altura configurado no app.');
+    } else {
+      var clr=o.alt-above;
+      if(clr<=0) res.warns.push('PERIGO: o terreno chega a '+Math.round(above)+' m acima da decolagem, mais alto que a altura de voo ('+o.alt+' m). O drone pode bater no chão. Suba a altura para pelo menos '+Math.ceil(above+30)+' m ou ative "Compensar relevo".');
+      else if(clr<20) res.warns.push('Pouca folga: o ponto mais alto do terreno fica '+Math.round(above)+' m acima da decolagem, sobrando só '+Math.round(clr)+' m (sem contar árvores e construções). Suba a altura ou ative "Compensar relevo".');
+      else if((mx-mn) > 0.2*o.alt) res.warns.push('Desnível de '+Math.round(mx-mn)+' m: a resolução e a sobreposição variam na área. Considere ativar "Compensar relevo" (Opções avançadas).');
+    }
+    return res; }
+
+  // ======================= Pontos de controle (GCP) =======================
+  function genGcps(){ var n=+$('gcpN').value, shape=poly.length>=3?poly:(fixed?hull(fixed):[]); if(!n || shape.length<3){ gcps=[]; redraw(); return; }
+    var c0={lat:shape.reduce(function(a,q){return a+q.lat;},0)/shape.length, lon:shape.reduce(function(a,q){return a+q.lon;},0)/shape.length};
+    var R=6378137, D=Math.PI/180, cs=Math.cos(c0.lat*D);
+    var to=function(q){return {x:(q.lon-c0.lon)*D*R*cs, y:(q.lat-c0.lat)*D*R};}, from=function(v){return {lat:c0.lat+v.y/R/D, lon:c0.lon+v.x/(R*cs)/D};};
+    var b=(lastCalc&&lastCalc.r&&lastCalc.r.bearing)||0, dv={x:Math.sin(b*D),y:Math.cos(b*D)}, nv={x:Math.cos(b*D),y:-Math.sin(b*D)};
+    var S=[],T=[]; shape.forEach(function(q){ var v=to(q); S.push(v.x*nv.x+v.y*nv.y); T.push(v.x*dv.x+v.y*dv.y); });
+    var s0=Math.min.apply(null,S), s1=Math.max.apply(null,S), t0=Math.min.apply(null,T), t1=Math.max.apply(null,T), fs=(s1-s0)*0.12, ft=(t1-t0)*0.12, sc=(s0+s1)/2, tc=(t0+t1)/2;
+    var st=[[s0+fs,t0+ft],[s1-fs,t0+ft],[s1-fs,t1-ft],[s0+fs,t1-ft],[sc,tc]];
+    var longT=(t1-t0)>=(s1-s0);
+    if(n>=7) st = st.concat(longT ? [[s0+fs,tc],[s1-fs,tc]] : [[sc,t0+ft],[sc,t1-ft]]);
+    if(n>=9) st = st.concat(longT ? [[sc,t0+ft],[sc,t1-ft]] : [[s0+fs,tc],[s1-fs,tc]]);
+    gcps = st.map(function(a){ var p=from({x:a[0]*nv.x+a[1]*dv.x, y:a[0]*nv.y+a[1]*dv.y});
+      for(var k=0;k<10 && !inPoly(p,shape);k++){ p={lat:p.lat+(c0.lat-p.lat)*0.15, lon:p.lon+(c0.lon-p.lon)*0.15}; } return p; });
+    redraw(); }
+  function utm(lat,lon){ var a=6378137, f=1/298.257223563, k0=0.9996, e2=f*(2-f), ep2=e2/(1-e2), zone=Math.floor((lon+180)/6)+1;
+    var l0=((zone-1)*6-180+3)*Math.PI/180, p=lat*Math.PI/180, l=lon*Math.PI/180, sp=Math.sin(p), cp=Math.cos(p);
+    var N=a/Math.sqrt(1-e2*sp*sp), T=Math.tan(p)*Math.tan(p), C=ep2*cp*cp, A=cp*(l-l0);
+    var M=a*((1-e2/4-3*e2*e2/64-5*e2*e2*e2/256)*p-(3*e2/8+3*e2*e2/32+45*e2*e2*e2/1024)*Math.sin(2*p)+(15*e2*e2/256+45*e2*e2*e2/1024)*Math.sin(4*p)-(35*e2*e2*e2/3072)*Math.sin(6*p));
+    var E=k0*N*(A+(1-T+C)*Math.pow(A,3)/6+(5-18*T+T*T+72*C-58*ep2)*Math.pow(A,5)/120)+500000;
+    var Y=k0*(M+N*Math.tan(p)*(A*A/2+(5-T+9*C+4*C*C)*Math.pow(A,4)/24+(61-58*T+T*T+600*C-330*ep2)*Math.pow(A,6)/720)); if(lat<0) Y+=10000000;
+    return {zone:zone+(lat<0?'S':'N'), E:E, N:Y}; }
+  function gcpCsv(){ return 'Nome,Latitude,Longitude,Zona UTM,Este (m),Norte (m)\n'+gcps.map(function(g,i){ var u=utm(g.lat,g.lon);
+    return 'GCP'+(i+1)+','+g.lat.toFixed(8)+','+g.lon.toFixed(8)+','+u.zone+','+u.E.toFixed(3)+','+u.N.toFixed(3); }).join('\n')+'\n'; }
+  $('gcpN').addEventListener('change',function(){ genGcps(); });
+  $('bGcpRe').onclick=function(){ if(!+$('gcpN').value) $('gcpN').value='5'; genGcps(); toast('Pontos de controle redistribuídos'); };
+  $('bGcpCsv').onclick=function(){ if(!gcps.length) return toast('Escolha a quantidade de pontos primeiro'); download(fname()+'_GCP.csv', gcpCsv()); };
+  $('bGcpKml').onclick=function(){ if(!gcps.length) return toast('Escolha a quantidade de pontos primeiro');
+    download(fname()+'_GCP.kml','<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>'+fname()+' – pontos de controle</name>'+
+      gcps.map(function(g,i){ return '<Placemark><name>GCP'+(i+1)+'</name><Point><coordinates>'+g.lon.toFixed(8)+','+g.lat.toFixed(8)+',0</coordinates></Point></Placemark>'; }).join('')+'</Document></kml>\n'); };
+
+  // ======================= Projetos =======================
+  var PKEY='fimiProjetos';
+  function projs(){ try{ return JSON.parse(localStorage.getItem(PKEY)||'{}'); }catch(e){ return {}; } }
+  function escH(x){ return String(x).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function projList(sel){ var p=projs(), ns=Object.keys(p).sort(function(a,b){return (p[b].saved||0)-(p[a].saved||0);});
+    $('projSel').innerHTML='<option value="">'+(ns.length?'Escolha ('+ns.length+' salvos)':'Nenhum projeto salvo')+'</option>'+ns.map(function(n){ return '<option value="'+escH(n)+'">'+escH(n)+' · '+new Date(p[n].saved).toLocaleDateString('pt-BR')+'</option>'; }).join('');
+    $('projSel').value = sel||''; }
+  $('bProjSave').onclick=function(){ var n=baseName($('name').value); if(!n){ toast('Digite o nome do projeto no campo "Nome do projeto"'); $('name').focus(); return; }
+    if(!poly.length && !(fixed&&fixed.length)) return toast('Desenhe a área antes de salvar');
+    var p=projs(), had=!!p[n]; p[n]={saved:Date.now(), st:state()};
+    try{ localStorage.setItem(PKEY,JSON.stringify(p)); projList(n); toast(had?'Projeto atualizado':'Projeto salvo'); }catch(e){ toast('Sem espaço para salvar: exclua projetos antigos'); } };
+  $('projSel').onchange=function(){ var n=this.value, p=projs(); if(!n||!p[n]) return; load(p[n].st,false); redraw(); fit(); toast('Projeto aberto: '+n); };
+  $('bProjNew').onclick=function(){ poly=[]; fixed=null; gcps=[]; $('name').value=''; $('projSel').value=''; redraw(); toast('Novo projeto: desenhe a área'); };
+  $('bProjDel').onclick=function(){ var n=$('projSel').value; if(!n) return toast('Escolha na lista o projeto a excluir');
+    confirmBox('Excluir o projeto "'+escH(n)+'"? Isso não pode ser desfeito.','Cancelar','Excluir').then(function(yes){ if(!yes) return; var p=projs(); delete p[n];
+      try{ localStorage.setItem(PKEY,JSON.stringify(p)); }catch(e){} projList(''); toast('Projeto excluído'); }); };
+
+  // ======================= Relatório =======================
+  function mercX(lon,z){ return (lon+180)/360*256*Math.pow(2,z); }
+  function mercY(lat,z){ var r=lat*Math.PI/180; return (1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*256*Math.pow(2,z); }
+  function mapImage(){ var c=lastCalc; var pts=(fixed||poly).concat(home?[home]:[]).concat(gcps); c.parts.forEach(function(p){ pts=pts.concat(p.wps); });
+    if(!pts.length) return Promise.resolve(null);
+    var la=pts.map(function(q){return q.lat;}), lo=pts.map(function(q){return q.lon;}), W=1000, H=700, pad=40, base=map.hasLayer(osm)?osm:(map.hasLayer(clar)?clar:sat), z;
+    for(z=Math.min(19, base.options.maxNativeZoom||19); z>3; z--){ var w=mercX(Math.max.apply(null,lo),z)-mercX(Math.min.apply(null,lo),z), h=mercY(Math.min.apply(null,la),z)-mercY(Math.max.apply(null,la),z); if(w<=W-2*pad && h<=H-2*pad) break; }
+    var cx=(mercX(Math.min.apply(null,lo),z)+mercX(Math.max.apply(null,lo),z))/2, cy=(mercY(Math.min.apply(null,la),z)+mercY(Math.max.apply(null,la),z))/2, ox=cx-W/2, oy=cy-H/2;
+    var cv=document.createElement('canvas'); cv.width=W; cv.height=H; var g=cv.getContext('2d'); g.fillStyle='#d9dedf'; g.fillRect(0,0,W,H);
+    var jobs=[]; for(var tx=Math.floor(ox/256); tx<=Math.floor((ox+W)/256); tx++) for(var ty=Math.floor(oy/256); ty<=Math.floor((oy+H)/256); ty++) (function(tx,ty){
+      var u=base._url.replace('{z}',z).replace('{x}',tx).replace('{y}',ty).replace('{s}','a');
+      jobs.push(fetch(u,{mode:'cors'}).then(function(r){ if(!r.ok) throw 0; return r.blob(); }).then(createImageBitmap).then(function(img){ g.drawImage(img, tx*256-ox, ty*256-oy); }).catch(function(){})); })(tx,ty);
+    var P=function(q){ return [mercX(q.lon,z)-ox, mercY(q.lat,z)-oy]; };
+    return Promise.all(jobs).then(function(){
+      var shape=fixed?null:poly; if(shape&&shape.length>=3){ g.beginPath(); shape.forEach(function(q,i){ var a=P(q); i?g.lineTo(a[0],a[1]):g.moveTo(a[0],a[1]); }); g.closePath(); g.fillStyle='rgba(15,110,120,.18)'; g.fill(); g.lineWidth=3; g.strokeStyle='#0f6e78'; g.stroke(); }
+      var cols=['#ff5a1f','#ffd21f','#3ad1ff','#c56bff','#5be37a','#ff7ab6'];
+      c.parts.forEach(function(p,i){ g.beginPath(); p.wps.forEach(function(q,k){ var a=P(q); k?g.lineTo(a[0],a[1]):g.moveTo(a[0],a[1]); }); g.lineWidth=5; g.strokeStyle='#fff'; g.stroke(); g.lineWidth=3; g.strokeStyle=cols[i%cols.length]; g.stroke();
+        var a=P(p.wps[0]); g.fillStyle='#13212b'; g.fillRect(a[0]-11,a[1]-11,22,22); g.fillStyle='#fff'; g.font='bold 13px sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText(String(i+1),a[0],a[1]+1); });
+      gcps.forEach(function(q,i){ var a=P(q); g.save(); g.translate(a[0],a[1]); g.rotate(Math.PI/4); g.fillStyle='#8b3dff'; g.strokeStyle='#fff'; g.lineWidth=2; g.fillRect(-9,-9,18,18); g.strokeRect(-9,-9,18,18); g.restore();
+        g.fillStyle='#fff'; g.font='bold 11px sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText(String(i+1),a[0],a[1]+1); });
+      if(home){ var a=P(home); g.fillStyle='#13212b'; g.strokeStyle='#fff'; g.lineWidth=2; g.fillRect(a[0]-13,a[1]-13,26,26); g.strokeRect(a[0]-13,a[1]-13,26,26); g.fillStyle='#fff'; g.font='bold 15px sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText('H',a[0],a[1]+1); }
+      try{ return cv.toDataURL('image/jpeg',0.85); }catch(e){ return null; } }); }
+  function reportHtml(img){ var c=lastCalc, o=c.o, r=c.r, f=function(x,d){ return Number(x).toLocaleString('pt-BR',{minimumFractionDigits:d||0,maximumFractionDigits:d||0}); };
+    var name=baseName($('name').value)||'Área', now=new Date(), gx=$('gimbalX').value, rows=[];
+    var add=function(k,v){ rows.push('<tr><th>'+k+'</th><td>'+v+'</td></tr>'); };
+    var perim=0, sh=fixed?[]:poly; for(var i=0;i<sh.length;i++) perim+=Core.hav(sh[i],sh[(i+1)%sh.length]);
+    if(!fixed){ add('Área', f(r.area/10000,2)+' ha'); add('Perímetro', f(perim)+' m'); }
+    add('Altura de voo', o.alt+' m '+(c.terr.comp?'sobre o terreno (compensação de relevo ativa)':'em relação à decolagem'));
+    if(!fixed){ add('Resolução no solo (GSD)', '≈ '+f(r.gsd,2)+' cm/pixel'); add('Sobreposição', 'lateral '+o.side+'% · frontal '+o.front+'%');
+      add('Faixas', r.lines+' por direção, a cada '+f(r.spacing,1)+' m · margem '+f(r.margin)+' m');
+      add('Direções', c.npass===1?'Uma ('+Math.round(r.bearing)+'°)':c.angles.map(function(a){return Math.round(a)+'°';}).join(', ')+(c.joined?' — rota contínua':' — separadas por direção'));
+      add('Fotos', o.photo==='wp'?'Uma foto em cada waypoint':'Intervalo da câmera a cada <b>'+f(Math.max(0.5,Math.floor(r.interval*2)/2),1)+' s</b>'); }
+    add('Velocidade', f(o.speed,1)+' m/s');
+    add('Gimbal', o.gimbal? (o.gimbal/100)+'° definido automaticamente em cada ponto'+(c.npass>1&&gx!=='same'?' ('+(+gx/100)+'° nas direções extras)':'') : 'não definido pela rota (ajustar manualmente)');
+    add('Baterias', c.parts.length+' · tempo total estimado '+fmtMin(c.total)+' · '+c.totPts+' waypoints');
+    add('Ao terminar / perda de sinal', ($('end').value==='4'?'Volta para casa':'Paira')+' / '+($('lost').value==='0'?'sai da missão (o drone executa o retorno de segurança)':'continua a missão'));
+    if(home) add('Decolagem (H)', home.lat.toFixed(7)+', '+home.lon.toFixed(7));
+    if(c.terr.min!==null) add('Relevo', 'de '+Math.round(c.terr.min)+' a '+Math.round(c.terr.max)+' m de altitude (desnível '+Math.round(c.terr.max-c.terr.min)+' m)');
+    var bats=c.parts.map(function(p,i){ return '<tr><td>'+(i+1)+'</td><td>'+(c.npass>1&&!c.joined?'Direção '+(p.pass+1):(c.npass>1?'Contínua':'—'))+'</td><td>'+p.wps.length+'</td><td>'+fmtMin(Core.missionTime(p.wps,home,o))+'</td><td>'+escH(fname()+partSuffix(i))+'.kml</td></tr>'; }).join('');
+    var gtab=gcps.length? '<h2>Pontos de controle (coletar com RTK)</h2><table><tr><th>Ponto</th><th>Latitude</th><th>Longitude</th><th>UTM</th></tr>'+gcps.map(function(g,i){ var u=utm(g.lat,g.lon); return '<tr><td>GCP'+(i+1)+'</td><td>'+g.lat.toFixed(7)+'</td><td>'+g.lon.toFixed(7)+'</td><td>'+u.zone+' · E '+f(u.E,1)+' · N '+f(u.N,1)+'</td></tr>'; }).join('')+'</table><p class="muted">Posições sugeridas para localizar os alvos em campo. As coordenadas finais são as medidas pelo RTK.</p>' : '';
+    var interval = (!fixed && o.photo==='interval') ? f(Math.max(0.5,Math.floor(r.interval*2)/2),1)+' s' : null;
+    var steps=['Bateria carregada e hélices em bom estado; cartão de memória com espaço.',
+      'Ligue o drone no ponto H e espere o GPS fixar (ponto de retorno atualizado no app).',
+      'No FIMI Navi: Voo inteligente → Ponto de referência → História → aba <b>Favorito</b> → abra a rota da bateria da vez e confira os pontos no mapa.',
+      o.gimbal ? 'Gimbal: a rota define '+(o.gimbal/100)+'° em cada ponto. Na primeira bateria, confira se a câmera apontou como esperado.' : 'Gimbal: aponte a câmera para '+(o.photo==='interval'?'−90°':'a inclinação desejada')+' antes de iniciar.',
+      interval ? 'Câmera em <b>foto por intervalo de '+interval+'</b>; inicie as fotos ao começar a rota e pare ao terminar.' : 'Fotos: o drone fotografa em cada waypoint automaticamente.',
+      'Execute a rota e mantenha o drone sempre à vista. Vento forte, chuva ou alerta de bateria: pause e traga o drone de volta.',
+      'Ao pousar, troque a bateria e abra a próxima rota da lista (cada uma começa onde a anterior terminou).',
+      'No final, confira a quantidade de fotos e anote qualquer falha (bateria, faixa, horário).'];
+    return '<h1>Relatório de levantamento – '+escH(name)+'</h1><div class="muted">Gerado em '+now.toLocaleString('pt-BR')+' · FIMI X8 Tele Max · Rota em grade</div>'+
+      (img?'<h2>Mapa</h2><img src="'+img+'" alt="Mapa da área"><div class="muted">Contorno da área, rotas por bateria (número = início de cada bateria), H = decolagem, losangos = pontos de controle.</div>':'')+
+      '<h2>Resumo</h2><table>'+rows.join('')+'</table>'+
+      (bats?'<h2>Baterias (ordem de voo)</h2><table><tr><th>#</th><th>Direção</th><th>Pontos</th><th>Tempo</th><th>Arquivo</th></tr>'+bats+'</table>':'')+gtab+
+      '<h2>Ficha do operador</h2><ol>'+steps.map(function(s){return '<li>'+s+'</li>';}).join('')+'</ol>'+
+      '<p class="muted">Imagem: Esri · Relevo: Terrain Tiles (Mapzen/AWS, dados SRTM e outras fontes abertas). Tempos e alturas são estimativas: confirme no app antes de cada voo.</p>'; }
+  function buildReport(){ if(!lastCalc || !lastCalc.parts.length){ toast('Desenhe a área primeiro'); return Promise.resolve(null); }
+    toast('Montando o relatório…'); return mapImage().then(function(img){ return reportHtml(img); }); }
+  $('bReport').onclick=function(){ buildReport().then(function(html){ if(!html) return; $('report').innerHTML=html; document.body.classList.add('printing');
+    setTimeout(function(){ try{ window.print(); }catch(e){ toast('Impressão indisponível: use "Baixar relatório"'); } },300); }); };
+  window.addEventListener('afterprint',function(){ document.body.classList.remove('printing'); });
+  $('bReportHtml').onclick=function(){ buildReport().then(function(html){ if(!html) return;
+    var css=[].slice.call(document.styleSheets).map(function(){return '';}).join('');
+    download(fname()+'_relatorio.html','<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Relatório – '+escH(baseName($('name').value)||'Área')+'</title><style>body{margin:16px;font:13px/1.45 system-ui,sans-serif;color:#111;background:#fff;max-width:900px}h1{font-size:20px;margin:0 0 2px}h2{font-size:15px;margin:16px 0 6px;border-bottom:2px solid #13212b;padding-bottom:2px}table{width:100%;border-collapse:collapse}td,th{border:1px solid #bbb;padding:4px 6px;text-align:left;font-size:12.5px}th{background:#eef2f4}img{width:100%;border:1px solid #999}.muted{color:#555;font-size:11px}ol{padding-left:18px}@page{size:A4;margin:12mm}</style></head><body>'+html+'</body></html>'); }); };
   $('parts').addEventListener('click',function(e){ var b=e.target.closest('button[data-part]'); if(!b) return;
-    var i=+b.dataset.part, wps=parts[i].wps, o=opts(), d=0;
+    var i=+b.dataset.part, o=opts(), d=0, gx=$('gimbalX').value;
+    var wps=parts[i].wps.map(function(q){ return {lat:q.lat, lon:q.lon, alt:q.alt, gp:(q.pass>0 && gx!=='same') ? +gx : o.gimbal}; });
     for(var z=1;z<wps.length;z++) d+=Core.hav(wps[z-1],wps[z]);
     var nm=fname()+partSuffix(i);
     download(nm+'.kml', Core.fimiKml(nm,wps,o,d,JSON.stringify(state()))); });
@@ -557,6 +812,7 @@ if (typeof module!=='undefined') module.exports=Core;
   $('fileIn').onchange=function(e){ var f=e.target.files[0]; if(!f) return; f.text().then(function(t){ importKml(t,f.name); }); };
   FIELDS.forEach(function(k){ $(k).addEventListener('input',compute); });
 
+  calUI(); projList('');
   var saved=null; try{ saved=JSON.parse(localStorage.getItem(KEY)||'null'); }catch(e){}
   if(saved) load(saved,false);
   else { var old=null; try{ old=JSON.parse(localStorage.getItem('fimiGrade2')||'null'); }catch(e){} if(old) load(old,true); }
