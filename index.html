@@ -486,7 +486,13 @@ if (typeof module!=='undefined') module.exports=Core;
   function toast(t){ var e=$('toast'); e.textContent=t; e.style.display='block'; clearTimeout(e._t); e._t=setTimeout(function(){e.style.display='none';},3500); }
   var STAMP_RE=/_(\d{4}_\d{4}|\d{2}-\d{2}_\d{2}h\d{2})$/;
   function stampNow(){ var d=new Date(),p=function(n){return (n<10?'0':'')+n;}; return p(d.getDate())+'-'+p(d.getMonth()+1)+'_'+p(d.getHours())+'h'+p(d.getMinutes()); }
-  function baseName(v){ return String(v||'').trim().replace(/\.kml$/i,'').replace(/_GoogleEarth$/,'').replace(/(_d\d)?_bat\d+de\d+$/,'').replace(STAMP_RE,''); }
+  var PART_RE=/(_(d\d|D\d-[A-Za-z]+-[A-Z]{1,2}|Continua))?_bat\d+de\d+$/;
+  function baseName(v){ return String(v||'').trim().replace(/\.kml$/i,'').replace(/_(GoogleEarth|relatorio|GCP)$/,'').replace(STAMP_RE,'').replace(PART_RE,'').replace(STAMP_RE,''); }
+  // Nome da direção: papel (Principal/Cruzada/Diagonal) + orientação das faixas na bússola.
+  var PASS_NAMES=['Principal','Cruzada','Diagonal'];
+  function compassAxis(b){ var k=Math.round((((b%180)+180)%180)/45)%4; return ['NS','NE-SO','LO','NO-SE'][k]; }
+  function passLabel(p){ return 'D'+(p.pass+1)+'-'+PASS_NAMES[p.pass]+'-'+compassAxis(p.ang||0).replace('-',''); }
+  function passLabelLong(p){ return 'Direção '+(p.pass+1)+' – '+PASS_NAMES[p.pass]+' ('+compassAxis(p.ang||0).replace('NS','Norte–Sul').replace('LO','Leste–Oeste').replace('NE-SO','Nordeste–Sudoeste').replace('NO-SE','Noroeste–Sudeste')+')'; }
   var stamp=null, stampSig='';
   function fmtMin(s){ return Math.ceil(s/60)+' min'; }
   function setMode(m){ mode=m; $('bArea').classList.toggle('on',m==='area'); $('bHome').classList.toggle('on',m==='home');
@@ -572,9 +578,9 @@ if (typeof module!=='undefined') module.exports=Core;
     $('warns').innerHTML = w.map(function(t){return '<li>'+t.replace(/</g,'&lt;')+'</li>';}).join('');
     var n=parts.length;
     $('parts').innerHTML = !n ? '<button class="pri" disabled>'+(fixed?'Adicione pelo menos 2 pontos':'Marque pelo menos 3 cantos no mapa')+'</button>' :
-      parts.map(function(p,i){ return '<button class="pri" data-part="'+i+'"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:8px;border:2px solid #fff;vertical-align:-1px;background:'+colors[i%colors.length]+'"></span>'+(n>1?'Bateria '+(i+1)+' de '+n+(npass>1&&!joined?' · direção '+(p.pass+1):'')+' · ':'Baixar KML para o FIMI · ')+fmtMin(Core.missionTime(p.wps,home,o))+'</button>'; }).join('');
+      parts.map(function(p,i){ return '<button class="pri" data-part="'+i+'"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:8px;border:2px solid #fff;vertical-align:-1px;background:'+colors[i%colors.length]+'"></span>'+(n>1?'Bateria '+(i+1)+' de '+n+(npass>1&&!joined?' · '+PASS_NAMES[p.pass]+' '+compassAxis(p.ang||0).replace('-','/'):'')+' · ':'Baixar KML para o FIMI · ')+fmtMin(Core.missionTime(p.wps,home,o))+'</button>'; }).join('');
     $('fsInfo').innerHTML = (parts.length ? '<b>'+parts.length+(parts.length>1?' baterias':' bateria')+' · '+fmtMin(total)+' · '+totPts+' pontos</b><br>' : '')+$('hint').textContent;
-    $('nameHint').textContent = !n ? '' : (n>1 ? 'Arquivos: '+fname()+partSuffix(0)+'.kml … '+partSuffix(n-1)+'.kml' : 'Arquivo: '+fname()+'.kml');
+    $('nameHint').textContent = !n ? '' : (n>1 ? 'Arquivos: '+partName(0)+'.kml … '+partName(n-1)+'.kml' : 'Arquivo: '+partName(0)+'.kml');
     lastCalc = {o:o, r:r, parts:parts, angles:angles, npass:npass, joined:joined, total:total, totPts:totPts, terr:terr, usable:usable};
     if(+$('gcpN').value>0 && !gcps.length && (poly.length>=3 || (fixed&&fixed.length>=3)) && !compute._gcpBusy){ compute._gcpBusy=true; setTimeout(function(){ genGcps(); compute._gcpBusy=false; },0); }
     if(!+$('gcpN').value && gcps.length){ setTimeout(function(){ gcps=[]; redraw(); },0); }
@@ -583,9 +589,12 @@ if (typeof module!=='undefined') module.exports=Core;
     save();
   }
   // Nome do arquivo = projeto + data/hora. A data é fixada no 1º download e vale para todas as partes da mesma rota.
-  function partSuffix(i){ var n=parts.length, p=parts[i]; if(n<2) return ''; return (+$('passes').value>1 && !fixed && $('join').value!=='1' ? '_d'+(p.pass+1) : '')+'_bat'+(i+1)+'de'+n; }
+  function partSuffix(i){ var n=parts.length, p=parts[i], multi=+$('passes').value>1 && !fixed; if(n<2 && !multi) return '';
+    return (multi ? ($('join').value==='1' ? '_Continua' : '_'+passLabel(p)) : '')+'_bat'+(i+1)+'de'+n; }
   function fname(){ var sig=JSON.stringify([poly,fixed,home,fieldVals()]); if(!stamp||sig!==stampSig){ stamp=stampNow(); stampSig=sig; }
     var b=baseName($('name').value).replace(/[^\w\-]+/g,'_').replace(/^_+|_+$/g,'').slice(0,30)||'Area'; return b+'_'+stamp; }
+  // Nome de cada arquivo de bateria: Projeto_[direção]_batXdeN_data_hora
+  function partName(i){ var f=fname(), k=f.lastIndexOf('_'+stamp); return f.slice(0,k)+partSuffix(i)+f.slice(k); }
   function download(name, text){
     var blob=new Blob([text],{type:'application/vnd.google-earth.kml+xml'}), a=document.createElement('a');
     a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click();
@@ -800,7 +809,7 @@ if (typeof module!=='undefined') module.exports=Core;
     add('Ao terminar / perda de sinal', ($('end').value==='4'?'Volta para casa':'Paira')+' / '+($('lost').value==='0'?'sai da missão (o drone executa o retorno de segurança)':'continua a missão'));
     if(home) add('Decolagem (H)', home.lat.toFixed(7)+', '+home.lon.toFixed(7));
     if(c.terr.min!==null) add('Relevo', 'de '+Math.round(c.terr.min)+' a '+Math.round(c.terr.max)+' m de altitude (desnível '+Math.round(c.terr.max-c.terr.min)+' m)');
-    var bats=c.parts.map(function(p,i){ return '<tr><td>'+(i+1)+'</td><td>'+(c.npass>1&&!c.joined?'Direção '+(p.pass+1):(c.npass>1?'Contínua':'—'))+'</td><td>'+p.wps.length+'</td><td>'+fmtMin(Core.missionTime(p.wps,home,o))+'</td><td>'+escH(fname()+partSuffix(i))+'.kml</td></tr>'; }).join('');
+    var bats=c.parts.map(function(p,i){ return '<tr><td>'+(i+1)+'</td><td>'+(c.npass>1&&!c.joined?passLabelLong(p):(c.npass>1?'Contínua':'—'))+'</td><td>'+p.wps.length+'</td><td>'+fmtMin(Core.missionTime(p.wps,home,o))+'</td><td>'+escH(partName(i))+'.kml</td></tr>'; }).join('');
     var gtab=gcps.length? '<h2>Pontos de controle (coletar com RTK)</h2><table><tr><th>Ponto</th><th>Latitude</th><th>Longitude</th><th>UTM</th></tr>'+gcps.map(function(g,i){ var u=utm(g.lat,g.lon); return '<tr><td>GCP'+(i+1)+'</td><td>'+g.lat.toFixed(7)+'</td><td>'+g.lon.toFixed(7)+'</td><td>'+u.zone+' · E '+f(u.E,1)+' · N '+f(u.N,1)+'</td></tr>'; }).join('')+'</table><p class="muted">Posições sugeridas para localizar os alvos em campo. As coordenadas finais são as medidas pelo RTK.</p>' : '';
     var interval = (!fixed && o.photo==='interval') ? f(Math.max(0.5,Math.floor(r.interval*2)/2),1)+' s' : null;
     var steps=['Bateria carregada e hélices em bom estado; cartão de memória com espaço.',
@@ -906,7 +915,7 @@ if (typeof module!=='undefined') module.exports=Core;
     var i=+b.dataset.part, o=opts(), d=0, gx=$('gimbalX').value;
     var wps=parts[i].wps.map(function(q){ return {lat:q.lat, lon:q.lon, alt:q.alt, gp:(q.pass>0 && gx!=='same') ? +gx : o.gimbal}; });
     for(var z=1;z<wps.length;z++) d+=Core.hav(wps[z-1],wps[z]);
-    var nm=fname()+partSuffix(i);
+    var nm=partName(i);
     download(nm+'.kml', Core.fimiKml(nm,wps,o,d,JSON.stringify(state()))); });
   $('bGE').onclick=function(){ if(!last||!last.wps.length) return toast('Desenhe a área primeiro');
     download(fname()+'_GoogleEarth.kml', Core.stdKml(fname(),fixed?hull(fixed):poly,last.wps,home,opts().alt)); };
