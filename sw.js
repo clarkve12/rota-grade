@@ -2,7 +2,7 @@
    - App (página e biblioteca do mapa): busca na internet e guarda a última versão; sem internet, usa a guardada.
    - Imagens do mapa: guarda as que você visualizou e usa a cópia quando estiver sem internet.
      Não há download em massa: só fica salvo o que foi visto. */
-var SHELL = 'rg-app-v3';
+var SHELL = 'rg-app-v4';
 var TILES = 'rg-mapa-v1';
 var MAX_TILES = 8000;                       // ~150–250 MB no máximo
 var SHELL_URLS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png', './icon-180.png', './icon-maskable-512.png',
@@ -48,7 +48,8 @@ self.addEventListener('fetch', function(e){
     return;
   }
 
-  var isShell = req.mode === 'navigate' || SHELL_URLS.some(function(u){ return url === u || url === new URL(u, self.location).href; });
+  var bare = url.split('?')[0];
+  var isShell = req.mode === 'navigate' || SHELL_URLS.some(function(u){ return url === u || bare === new URL(u, self.location).href; });
   if(isShell){
     // Sinal fraco no campo: se a internet não responder em 4 s, abre a cópia salva.
     var fromCache = function(){ return caches.open(SHELL).then(function(c){ return c.match(req.mode === 'navigate' ? './index.html' : req, {ignoreSearch: true}); }); };
