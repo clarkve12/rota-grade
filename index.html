@@ -484,10 +484,12 @@ if (typeof module!=='undefined') module.exports=Core;
     return {start:start, move:move, stop:stop}; })();
   function withLoupe(m, onMove, onEnd){ m.on('dragstart',function(){ loupe.start(); }); m.on('drag',function(e){ loupe.move(e.latlng); if(onMove) onMove(e.latlng); }); m.on('dragend',function(e){ loupe.stop(); if(onEnd) onEnd(e.target.getLatLng()); }); }
   function toast(t){ var e=$('toast'); e.textContent=t; e.style.display='block'; clearTimeout(e._t); e._t=setTimeout(function(){e.style.display='none';},3500); }
-  var STAMP_RE=/_(\d{4}_\d{4}|\d{2}-\d{2}_\d{2}h\d{2})$/;
-  function stampNow(){ var d=new Date(),p=function(n){return (n<10?'0':'')+n;}; return p(d.getDate())+'-'+p(d.getMonth()+1)+'_'+p(d.getHours())+'h'+p(d.getMinutes()); }
-  var PART_RE=/(_(d\d|D\d-[A-Za-z]+-[A-Z]{1,2}|Continua))?_bat\d+de\d+$/;
-  function baseName(v){ return String(v||'').trim().replace(/\.kml$/i,'').replace(/_(GoogleEarth|relatorio|GCP)$/,'').replace(STAMP_RE,'').replace(PART_RE,'').replace(STAMP_RE,''); }
+  var STAMP_RE=/_(\d{4}_\d{4}|\d{2}-\d{2}_\d{2}h\d{2}|\d{2}-\d{2})$/;
+  function stampNow(){ var d=new Date(),p=function(n){return (n<10?'0':'')+n;}; return p(d.getDate())+'-'+p(d.getMonth()+1); }
+  var FLY_RE=/_\d+m-\d+(,\d+)?ms$/;
+  function flyTag(){ var a=Math.round(+$('alt').value||0), s=Math.round((+$('spd').value||0)*10)/10; return '_'+a+'m-'+String(s).replace('.',',')+'ms'; }
+  var DIR_RE=/_(d\d|D\d-[A-Za-z]+-[A-Z]{2,4}|Continua)$/;
+  function baseName(v){ return String(v||'').trim().replace(/\.kml$/i,'').replace(/_(GoogleEarth|relatorio|GCP)$/,'').replace(STAMP_RE,'').replace(/_bat\d+de\d+$/,'').replace(FLY_RE,'').replace(DIR_RE,'').replace(STAMP_RE,''); }
   // Nome da direção: papel (Principal/Cruzada/Diagonal) + orientação das faixas na bússola.
   var PASS_NAMES=['Principal','Cruzada','Diagonal'];
   function compassAxis(b){ var k=Math.round((((b%180)+180)%180)/45)%4; return ['NS','NE-SO','LO','NO-SE'][k]; }
@@ -594,7 +596,9 @@ if (typeof module!=='undefined') module.exports=Core;
   function fname(){ var sig=JSON.stringify([poly,fixed,home,fieldVals()]); if(!stamp||sig!==stampSig){ stamp=stampNow(); stampSig=sig; }
     var b=baseName($('name').value).replace(/[^\w\-]+/g,'_').replace(/^_+|_+$/g,'').slice(0,30)||'Area'; return b+'_'+stamp; }
   // Nome de cada arquivo de bateria: Projeto_[direção]_batXdeN_data_hora
-  function partName(i){ var f=fname(), k=f.lastIndexOf('_'+stamp); return f.slice(0,k)+partSuffix(i)+f.slice(k); }
+  // Projeto_[direção]_ALTm-VELms_[batXdeN]_dd-mm
+  function partName(i){ var f=fname(), k=f.lastIndexOf('_'+stamp), sx=partSuffix(i), m=sx.match(/_bat\d+de\d+$/), dir=m?sx.slice(0,m.index):sx, bat=m?m[0]:'';
+    return f.slice(0,k)+dir+flyTag()+bat+f.slice(k); }
   function download(name, text){
     var blob=new Blob([text],{type:'application/vnd.google-earth.kml+xml'}), a=document.createElement('a');
     a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click();
