@@ -947,6 +947,7 @@ if (typeof module!=='undefined') module.exports=Core;
   $('cam').onchange=function(){ applyCam(); compute(); };
   $('fileIn').onchange=function(e){ var f=e.target.files[0]; if(!f) return; f.text().then(function(t){ importKml(t,f.name); }); };
   FIELDS.forEach(function(k){ $(k).addEventListener('input',compute); });
+  $('photo').addEventListener('change',compute);
   // Predefinições de ortofoto: botões fixos + barra 40–60 m (velocidade = 3 m/s a 40 m, +0,1 m/s por metro, até 5 m/s a 60 m).
   function slideSpeed(h){ return Math.round((3+(h-40)*0.1)*10)/10; }
   function syncPreset(){
@@ -954,7 +955,18 @@ if (typeof module!=='undefined') module.exports=Core;
     [].forEach.call($('presets').children,function(b){ b.classList.toggle('on', +b.dataset.a===a && +b.dataset.s===s); });
     if(a>=40 && a<=60) $('altSlide').value=a;
     var gsd=2*a*Math.tan(o.hfov/2*Math.PI/180)/o.imgw*100, blur=s*0.1/gsd;
-    $('presetInfo').innerHTML = a&&s ? a+' m · '+String(s).replace('.',',')+' m/s → resolução ≈ '+gsd.toFixed(2).replace('.',',')+' cm/px · arrasto a 1/1000 s ≈ '+blur.toFixed(2).replace('.',',')+' px'+(blur>0.55?' <b style="color:var(--warn)">— acima do ideal de 0,5 px: use até '+String(Math.floor(0.5*gsd/0.1*2)/2).replace('.',',')+' m/s ou obturador 1/2000 s</b>':' ✓') : '';
+    $('presetInfo').innerHTML = a&&s ? a+' m · '+String(s).replace('.',',')+' m/s → resolução ≈ '+gsd.toFixed(2).replace('.',',')+' cm/px · arrasto a 1/1000 s ≈ '+blur.toFixed(2).replace('.',',')+' px'+(blur>0.55?' <b style="color:var(--warn)">— acima do ideal de 0,5 px: use até '+String(Math.floor(0.5*gsd/0.1*2)/2).replace('.',',')+' m/s ou obturador 1/2000 s</b>':' ✓')+intervalInfo(a,s,o) : '';
+  }
+  // Lembrete do intervalo da câmera: o KML não leva essa configuração, ela é feita na câmera.
+  function intervalInfo(a,s,o){
+    var c=function(x){return String(x).replace('.',',');};
+    if($('photo').value==='wp') return '<br>📷 Foto em cada waypoint: deixe o disparo por intervalo desligado na câmera.';
+    var fl=2*a*Math.tan(o.vfov/2*Math.PI/180), front=(+$('front').value||75), dist=fl*(1-front/100);
+    var calc=Math.max(0.5,Math.floor(dist/s*2)/2), ov2=Math.round((1-2*s/fl)*100);
+    var t='<br>📷 <b>Intervalo na câmera</b> (o KML não leva): calculado <b>'+c(calc)+' s</b> para '+front+'% de sobreposição';
+    t+= calc>=2 ? ' · com <b>2 s</b> → ~'+ov2+'% (mais fotos, mais segura). Nunca acima de '+c(calc)+' s.'
+                : ' · <b style="color:var(--warn)">2 s é longo demais aqui: use '+c(calc)+' s ou reduza a velocidade.</b>';
+    return t;
   }
   function setAltSpd(a,s){ $('alt').value=a; $('spd').value=s; compute(); syncPreset(); }
   $('presets').addEventListener('click',function(e){ var b=e.target.closest('button'); if(!b) return; setAltSpd(+b.dataset.a,+b.dataset.s); toast('Predefinição: '+b.dataset.a+' m a '+b.dataset.s.replace('.',',')+' m/s'); });
