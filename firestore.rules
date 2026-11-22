@@ -1,16 +1,21 @@
 rules_version = '2';
-// Regras do Firestore do Fimapa: cada projeto pertence a quem criou (owner);
-// quem está na lista "members" (e-mails) só pode abrir.
+// Regras do Firestore do Fimapa: só as contas autorizadas usam a nuvem;
+// cada projeto pertence a quem criou (owner); quem está em "members" só abre.
 service cloud.firestore {
   match /databases/{database}/documents {
+    function permitido() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in ['clessiavs@gmail.com', 'infonewsav@gmail.com'];
+    }
     match /projects/{id} {
-      allow read: if request.auth != null && (
+      allow read: if permitido() && (
         resource.data.owner == request.auth.uid ||
         request.auth.token.email.lower() in resource.data.get('members', []));
-      allow create: if request.auth != null && request.resource.data.owner == request.auth.uid;
-      allow update: if request.auth != null && resource.data.owner == request.auth.uid
+      allow create: if permitido() && request.resource.data.owner == request.auth.uid;
+      allow update: if permitido() && resource.data.owner == request.auth.uid
                     && request.resource.data.owner == request.auth.uid;
-      allow delete: if request.auth != null && resource.data.owner == request.auth.uid;
+      allow delete: if permitido() && resource.data.owner == request.auth.uid;
     }
   }
 }
