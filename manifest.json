@@ -1,5 +1,5 @@
 {
-  "name": "Fimapa – rotas para ortofoto",
+  "name": "Fimapa – Rotas de voo",
   "short_name": "Fimapa",
   "description": "Gera rotas de mapeamento em grade para o FIMI Navi, com pontos de controle, relevo e modo offline.",
   "start_url": "./",
