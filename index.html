@@ -195,6 +195,14 @@ body.sim #bSimMap{background:#1463f0;color:#fff;border-color:#1463f0}
       <button class="sec full" id="bProjDel">Excluir projeto selecionado</button>
     </div>
     <p class="note">Salva área, H, pontos de controle e todos os ajustes com o nome do projeto. Fica no celular e funciona sem internet.</p>
+    <div id="cloudBox" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:18px">☁️</span><b style="font-size:15px">Nuvem e equipe</b></div>
+      <p class="note" id="cloudStatus" style="margin:0 0 8px">Carregando…</p>
+      <div class="grid">
+        <button class="sec" id="bLogin">Entrar com Google</button>
+        <button class="sec" id="bShare">Compartilhar</button>
+      </div>
+    </div>
   </section>
 
   <section class="card">
@@ -307,6 +315,7 @@ body.sim #bSimMap{background:#1463f0;color:#fff;border-color:#1463f0}
 <div id="report"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="firebase-config.js"></script>
 <script id="core">
 var Core = (function(){
   var R = 6378137, D2R = Math.PI/180;
@@ -762,17 +771,103 @@ if (typeof module!=='undefined') module.exports=Core;
   function projs(){ try{ return JSON.parse(localStorage.getItem(PKEY)||'{}'); }catch(e){ return {}; } }
   function escH(x){ return String(x).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
   function projList(sel){ var p=projs(), ns=Object.keys(p).sort(function(a,b){return (p[b].saved||0)-(p[a].saved||0);});
-    $('projSel').innerHTML='<option value="">'+(ns.length?'Escolha ('+ns.length+' salvos)':'Nenhum projeto salvo')+'</option>'+ns.map(function(n){ return '<option value="'+escH(n)+'">'+escH(n)+' · '+new Date(p[n].saved).toLocaleDateString('pt-BR')+'</option>'; }).join('');
+    $('projSel').innerHTML='<option value="">'+(ns.length?'Escolha ('+ns.length+' salvos)':'Nenhum projeto salvo')+'</option>'+ns.map(function(n){ return '<option value="'+escH(n)+'">'+escH(n)+' · '+new Date(p[n].saved).toLocaleDateString('pt-BR')+((p[n].members||[]).length?' · 👥':'')+'</option>'; }).join('')+Cloud.sharedOptions();
     $('projSel').value = sel||''; }
   $('bProjSave').onclick=function(){ var n=baseName($('name').value); if(!n){ toast('Digite o nome do projeto no campo "Nome do projeto"'); $('name').focus(); return; }
     if(!poly.length && !(fixed&&fixed.length)) return toast('Desenhe a área antes de salvar');
-    var p=projs(), had=!!p[n]; p[n]={saved:Date.now(), st:state()};
-    try{ localStorage.setItem(PKEY,JSON.stringify(p)); projList(n); toast(had?'Projeto atualizado':'Projeto salvo'); }catch(e){ toast('Sem espaço para salvar: exclua projetos antigos'); } };
-  $('projSel').onchange=function(){ var n=this.value, p=projs(); if(!n||!p[n]) return; load(p[n].st,false); redraw(); fit(); toast('Projeto aberto: '+n); };
+    var p=projs(), had=!!p[n]; p[n]={saved:Date.now(), st:state(), members:(p[n]&&p[n].members)||[]};
+    try{ localStorage.setItem(PKEY,JSON.stringify(p)); projList(n); toast(had?'Projeto atualizado':'Projeto salvo'); Cloud.saved(n); }catch(e){ toast('Sem espaço para salvar: exclua projetos antigos'); } };
+  $('projSel').onchange=function(){ var n=this.value, p=projs(); if(n.indexOf('s:')===0){ var sh=Cloud.shared(n.slice(2)); if(sh){ load(sh.st,false); $('name').value=sh.name; redraw(); fit(); toast('Projeto de '+(sh.by||'outra pessoa')+' aberto. Ao salvar, vira uma cópia sua.'); } return; } if(!n||!p[n]) return; load(p[n].st,false); redraw(); fit(); toast('Projeto aberto: '+n); };
   $('bProjNew').onclick=function(){ poly=[]; fixed=null; gcps=[]; $('name').value=''; $('projSel').value=''; redraw(); toast('Novo projeto: desenhe a área'); };
   $('bProjDel').onclick=function(){ var n=$('projSel').value; if(!n) return toast('Escolha na lista o projeto a excluir');
     confirmBox('Excluir o projeto "'+escH(n)+'"? Isso não pode ser desfeito.','Cancelar','Excluir').then(function(yes){ if(!yes) return; var p=projs(); delete p[n];
-      try{ localStorage.setItem(PKEY,JSON.stringify(p)); }catch(e){} projList(''); toast('Projeto excluído'); }); };
+      try{ localStorage.setItem(PKEY,JSON.stringify(p)); }catch(e){} Cloud.deleted(n); projList(''); toast('Projeto excluído'); }); };
+
+
+  // ======================= Nuvem (Firebase): login Google, backup, sincronização e equipe =======================
+  // Só liga se o arquivo firebase-config.js tiver a configuração do projeto Firebase.
+  var Cloud=(function(){
+    var cfg=(typeof firebaseConfig!=='undefined' && firebaseConfig && firebaseConfig.apiKey) ? firebaseConfig : null;
+    var db=null, auth=null, user=null, sharedMap={}, unsubs=[], ready=false;
+    var COL='projects';
+    function st(t){ $('cloudStatus').innerHTML=t; }
+    function email(){ return ((user&&user.email)||'').toLowerCase(); }
+    function docId(n){ return user.uid+'__'+String(n).replace(/[\/#?\[\]\.]/g,'_').slice(0,120); }
+    function loadSdk(){ return ['fb/firebase-app-compat.js','fb/firebase-auth-compat.js','fb/firebase-firestore-compat.js'].reduce(function(p,src){
+      return p.then(function(){ return new Promise(function(ok,ko){ var s=document.createElement('script'); s.src=src; s.onload=ok; s.onerror=ko; document.head.appendChild(s); }); }); }, Promise.resolve()); }
+    function ui(){
+      if(!ready){ return; }
+      if(user){ st('Conectado como <b>'+escH(user.email||user.displayName||'')+'</b>. Projetos salvos vão para a nuvem e aparecem em todos os seus aparelhos.'+(navigator.onLine?'':' <b style="color:var(--warn)">Sem internet: sincroniza quando voltar.</b>'));
+        $('bLogin').textContent='Sair da conta'; $('bShare').disabled=false; }
+      else { st('Entre com sua conta Google para ter backup dos projetos, usar os mesmos projetos em outros aparelhos e compartilhar com a equipe.');
+        $('bLogin').textContent='Entrar com Google'; $('bShare').disabled=true; }
+    }
+    function err(e){ console.warn(e); if(e&&e.code==='permission-denied') st('A nuvem recusou o acesso: confira as regras do Firestore no console do Firebase.'); }
+    function push(n,e){ if(!user||!db||!e) return Promise.resolve();
+      var d={owner:user.uid, ownerEmail:email(), ownerName:user.displayName||'', name:n, saved:e.saved||Date.now(), st:JSON.stringify(e.st), deleted:false};
+      if(e.members) d.members=e.members;
+      return db.collection(COL).doc(docId(n)).set(d,{merge:true}).catch(err); }
+    function mergeOwned(snap){
+      var p=projs(), changed=false, cloud={};
+      snap.forEach(function(d){ var x=d.data(); if(!x||!x.name) return; cloud[x.name]=x; var loc=p[x.name];
+        if(x.deleted){ if(loc && (x.saved||0)>=(loc.saved||0)){ delete p[x.name]; changed=true; } return; }
+        if(!loc || (x.saved||0)>(loc.saved||0)){ try{ p[x.name]={saved:x.saved, st:JSON.parse(x.st), members:x.members||[]}; changed=true; }catch(e){} }
+        else if(JSON.stringify(loc.members||[])!==JSON.stringify(x.members||[]) && (x.saved||0)===(loc.saved||0)){ loc.members=x.members||[]; changed=true; }
+      });
+      if(!snap.metadata.fromCache) Object.keys(p).forEach(function(n){ var c=cloud[n]; if(!c || (!c.deleted && (p[n].saved||0)>(c.saved||0)) || (c.deleted && (p[n].saved||0)>(c.saved||0))) push(n,p[n]); });
+      if(changed){ try{ localStorage.setItem(PKEY,JSON.stringify(p)); }catch(e){} }
+      projList($('projSel').value);
+    }
+    function onUser(u){
+      user=u; unsubs.forEach(function(f){ f(); }); unsubs=[]; sharedMap={}; ui();
+      if(!u){ projList($('projSel').value); return; }
+      unsubs.push(db.collection(COL).where('owner','==',u.uid).onSnapshot({includeMetadataChanges:false}, mergeOwned, err));
+      if(email()) unsubs.push(db.collection(COL).where('members','array-contains',email()).onSnapshot(function(snap){
+        sharedMap={}; snap.forEach(function(d){ var x=d.data(); if(x.owner!==u.uid && !x.deleted){ try{ sharedMap[d.id]={name:x.name, by:x.ownerName||x.ownerEmail, saved:x.saved, st:JSON.parse(x.st)}; }catch(e){} } });
+        projList($('projSel').value); }, err));
+    }
+    function init(){
+      if(!cfg) return;
+      $('cloudBox').style.display=''; st('Carregando a nuvem…');
+      loadSdk().then(function(){
+        if(!firebase.apps.length) firebase.initializeApp(cfg);
+        auth=firebase.auth(); db=firebase.firestore(); ready=true; ui();
+        auth.onAuthStateChanged(onUser);
+        auth.getRedirectResult().catch(function(e){ if(e&&e.code) toast('Login: '+e.code); });
+      }).catch(function(){ st('Nuvem indisponível agora (sem internet?). Os projetos continuam salvos no celular.'); });
+      window.addEventListener('online',ui); window.addEventListener('offline',ui);
+      $('bLogin').onclick=function(){
+        if(!ready) return toast('A nuvem ainda não carregou');
+        if(user){ confirmBox('Sair da conta '+escH(user.email||'')+'? Os projetos continuam no celular.','Cancelar','Sair').then(function(y){ if(y) auth.signOut(); }); return; }
+        var prov=new firebase.auth.GoogleAuthProvider(); prov.setCustomParameters({prompt:'select_account'});
+        auth.signInWithPopup(prov).catch(function(e){
+          if(e && (e.code==='auth/popup-blocked' || e.code==='auth/operation-not-supported-in-this-environment')) return auth.signInWithRedirect(prov);
+          if(e && e.code==='auth/unauthorized-domain') return toast('Domínio não autorizado: adicione clarkve12.github.io no Firebase (Authentication → Configurações → Domínios autorizados)');
+          if(e && e.code!=='auth/popup-closed-by-user' && e.code!=='auth/cancelled-popup-request') toast('Não foi possível entrar: '+(e.code||e.message));
+        });
+      };
+      $('bShare').onclick=function(){
+        if(!user) return toast('Entre com Google primeiro');
+        var n=$('projSel').value, p=projs();
+        if(!n || n.indexOf('s:')===0 || !p[n]) return toast('Escolha na lista um projeto seu já salvo para compartilhar');
+        var cur=(p[n].members||[]).join(', ');
+        var r=prompt('E-mails (conta Google) de quem pode abrir "'+n+'", separados por vírgula.\nApague um e-mail para parar de compartilhar com ele.', cur);
+        if(r===null) return;
+        var list=r.split(/[,;\s]+/).map(function(x){ return x.trim().toLowerCase(); }).filter(function(x){ return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x) && x!==email(); });
+        list=list.filter(function(x,i){ return list.indexOf(x)===i; });
+        p[n].members=list; try{ localStorage.setItem(PKEY,JSON.stringify(p)); }catch(e){}
+        push(n,p[n]).then(function(){ projList(n); toast(list.length?'Compartilhado com '+list.length+' pessoa(s)':'Projeto não está mais compartilhado'); });
+      };
+    }
+    return {
+      init:init,
+      saved:function(n){ if(user){ var p=projs(); push(n,p[n]); } },
+      deleted:function(n){ if(user&&db) db.collection(COL).doc(docId(n)).set({owner:user.uid, name:n, deleted:true, saved:Date.now(), st:'', members:[]},{merge:true}).catch(err); },
+      shared:function(id){ return sharedMap[id]||null; },
+      sharedOptions:function(){ var ks=Object.keys(sharedMap); if(!ks.length) return '';
+        return '<optgroup label="Compartilhados comigo">'+ks.map(function(k){ var x=sharedMap[k]; return '<option value="s:'+escH(k)+'">'+escH(x.name)+' · '+escH(x.by||'')+'</option>'; }).join('')+'</optgroup>'; }
+    };
+  })();
 
   // ======================= Relatório =======================
   var LOGO='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgdmlld0JveD0iMCAwIDUxMiA1MTIiPjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iIzJmOTVmZiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzBiNGZkOCIvPjwvbGluZWFyR3JhZGllbnQ+PGNsaXBQYXRoIGlkPSJjIj48cmVjdCB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgcng9IjExNCIvPjwvY2xpcFBhdGg+PC9kZWZzPjxyZWN0IHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiByeD0iMTE0IiBmaWxsPSJ1cmwoI2cpIi8+PGcgY2xpcC1wYXRoPSJ1cmwoI2MpIj48cGF0aCBkPSJNNjQgMFY1MTJNMCA2NEg1MTIiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4wOSIgc3Ryb2tlLXdpZHRoPSIzIi8+PHBhdGggZD0iTTEyOCAwVjUxMk0wIDEyOEg1MTIiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4wOSIgc3Ryb2tlLXdpZHRoPSIzIi8+PHBhdGggZD0iTTE5MiAwVjUxMk0wIDE5Mkg1MTIiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4wOSIgc3Ryb2tlLXdpZHRoPSIzIi8+PHBhdGggZD0iTTI1NiAwVjUxMk0wIDI1Nkg1MTIiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4wOSIgc3Ryb2tlLXdpZHRoPSIzIi8+PHBhdGggZD0iTTMyMCAwVjUxMk0wIDMyMEg1MTIiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4wOSIgc3Ryb2tlLXdpZHRoPSIzIi8+PHBhdGggZD0iTTM4NCAwVjUxMk0wIDM4NEg1MTIiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4wOSIgc3Ryb2tlLXdpZHRoPSIzIi8+PHBhdGggZD0iTTQ0OCAwVjUxMk0wIDQ0OEg1MTIiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4wOSIgc3Ryb2tlLXdpZHRoPSIzIi8+PC9nPjxnIGZpbGw9Im5vbmUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+CiAgICAgIDxwYXRoIGQ9Ik0xODAgMzg0VjEzMkgzNTAiIHN0cm9rZT0iIzBhM2E5ZSIgc3Ryb2tlLW9wYWNpdHk9Ii4zNSIgc3Ryb2tlLXdpZHRoPSI1NCIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNiA4KSIvPgogICAgICA8cGF0aCBkPSJNMTgwIDI1NEgzMTgiIHN0cm9rZT0iIzBhM2E5ZSIgc3Ryb2tlLW9wYWNpdHk9Ii4zNSIgc3Ryb2tlLXdpZHRoPSI1NCIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNiA4KSIvPgogICAgICA8cGF0aCBkPSJNMTgwIDM4NFYxMzJIMzUwIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iNTAiLz4KICAgICAgPHBhdGggZD0iTTE4MCAyNTRIMzE4IiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iNTAiLz4KICAgICAgPHBhdGggZD0iTTI0OCAzMThIMzYwIiBzdHJva2U9IiNmZmYiIHN0cm9rZS1vcGFjaXR5PSIuNTUiIHN0cm9rZS13aWR0aD0iMTAiIHN0cm9rZS1kYXNoYXJyYXk9IjIgMjIiLz4KICAgIDwvZz4KICAgIDxjaXJjbGUgY3g9IjM1MCIgY3k9IjEzMiIgcj0iMzEiIGZpbGw9IiNmZmYiLz48Y2lyY2xlIGN4PSIzNTAiIGN5PSIxMzIiIHI9IjEzIiBmaWxsPSIjMTQ2M2YwIi8+CiAgICA8Y2lyY2xlIGN4PSIzMTgiIGN5PSIyNTQiIHI9IjMxIiBmaWxsPSIjZmZmIi8+PGNpcmNsZSBjeD0iMzE4IiBjeT0iMjU0IiByPSIxMyIgZmlsbD0iIzE0NjNmMCIvPgogICAgPGNpcmNsZSBjeD0iMTgwIiBjeT0iMzg0IiByPSIzNiIgZmlsbD0iI2ZmNmExZiIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjEyIi8+PC9zdmc+';
@@ -986,7 +1081,7 @@ if (typeof module!=='undefined') module.exports=Core;
   var slT; $('altSlide').addEventListener('input',function(){ var h=+this.value; $('alt').value=h; $('spd').value=slideSpeed(h); syncPreset(); clearTimeout(slT); slT=setTimeout(compute,150); });
   syncPreset();
 
-  calUI(); projList('');
+  calUI(); projList(''); Cloud.init();
   var saved=null; try{ saved=JSON.parse(localStorage.getItem(KEY)||'null'); }catch(e){}
   if(saved) load(saved,false);
   else { var old=null; try{ old=JSON.parse(localStorage.getItem('fimiGrade2')||'null'); }catch(e){} if(old) load(old,true); }
