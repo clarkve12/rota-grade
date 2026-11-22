@@ -158,6 +158,7 @@ html.gated #gate{display:flex}html.gated body{overflow:hidden}
     </div>
   </div>
   <div class="hint" id="hint">Toque no mapa para marcar os cantos da área</div>
+  <button id="bResume" style="display:none;position:absolute;left:50%;transform:translateX(-50%);bottom:118px;z-index:460;min-height:40px;padding:6px 14px;border-radius:20px;border:0;background:#0d2747;color:#fff;font-weight:700;font-size:14px;box-shadow:0 4px 14px rgba(0,0,0,.3);white-space:nowrap;max-width:92%;overflow:hidden;text-overflow:ellipsis">↩ Retomar último trabalho</button>
   <div class="tools">
     <button id="bArea" class="on">Área</button>
     <button id="bHome">Marcar H</button>
@@ -212,8 +213,9 @@ html.gated #gate{display:flex}html.gated body{overflow:hidden}
       <button class="sec" id="bProjSave">Salvar projeto</button>
       <button class="sec" id="bProjNew">Novo</button>
       <button class="sec full" id="bProjDel">Excluir projeto selecionado</button>
+      <button class="sec full" id="bResume2" style="display:none">↩ Retomar último trabalho</button>
     </div>
-    <p class="note">Salva área, H, pontos de controle e todos os ajustes com o nome do projeto. Fica no celular e funciona sem internet.</p>
+    <p class="note">Salva área, H, pontos de controle e todos os ajustes com o nome do projeto. Fica na nuvem, com cópia no aparelho para usar sem internet. O Fimapa sempre abre com um projeto novo; use “Retomar último trabalho” para continuar de onde parou.</p>
     <div id="cloudBox" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:18px">☁️</span><b style="font-size:15px">Nuvem e equipe</b></div>
       <p class="note" id="cloudStatus" style="margin:0 0 8px">Carregando…</p>
@@ -538,7 +540,7 @@ if (typeof module!=='undefined') module.exports=Core;
       gimbal:+$('gimbal').value||0, batMin:($('bat').value==='cal'&&batCal())?batCal().min:(n('bat')||29), reserve:Math.min(60,Math.max(10,isNaN(n('reserve'))?30:n('reserve'))) }; }
   function fieldVals(){ return FIELDS.reduce(function(a,k){a[k]=$(k).value;return a;},{}); }
   function state(){ return {v:2, poly:poly, fixed:fixed, home:home, gcps:gcps, f:fieldVals()}; }
-  function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state())); }catch(e){} }
+  function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state())); }catch(e){} if(typeof resumeUI==='function') resumeUI(); if(typeof Cloud!=='undefined' && Cloud) Cloud.prefsTouch(); }
   function load(st, keepSpeedAlt){
     poly=st.poly||[]; fixed=st.fixed||null; home=st.home||null; gcps=st.gcps||[];
     if((st.v||1)<2 && st.f && st.f.margin==='0') st.f.margin='';   // antes "0" era o padrão; agora vazio = automática
@@ -808,7 +810,8 @@ if (typeof module!=='undefined') module.exports=Core;
   // Só liga se o arquivo firebase-config.js tiver a configuração do projeto Firebase.
   var Cloud=(function(){
     var cfg=(typeof firebaseConfig!=='undefined' && firebaseConfig && firebaseConfig.apiKey) ? firebaseConfig : null;
-    var db=null, auth=null, user=null, sharedMap={}, unsubs=[], ready=false;
+    var db=null, auth=null, user=null, sharedMap={}, unsubs=[], ready=false, prefsT=null, prefsLast='', prefsReady=false;
+    var PREFS=['passes','join','gimbal','gimbalX','terrain','gcpN','photo','side','front','cam','hfov','vfov','imgw','end','lost','yaw','maptype','bat','reserve'];
     var COL='projects';
     function st(t){ $('cloudStatus').innerHTML=t; }
     function email(){ return ((user&&user.email)||'').toLowerCase(); }
@@ -827,6 +830,20 @@ if (typeof module!=='undefined') module.exports=Core;
       var d={owner:user.uid, ownerEmail:email(), ownerName:user.displayName||'', name:n, saved:e.saved||Date.now(), st:JSON.stringify(e.st), deleted:false};
       if(e.members) d.members=e.members;
       return db.collection(COL).doc(docId(n)).set(d,{merge:true}).catch(err); }
+    // Preferências (câmera, sobreposição, bateria, calibração…) iguais em todos os aparelhos.
+    function prefsNow(){ var f={}; PREFS.forEach(function(k){ if($(k)) f[k]=$(k).value; }); return {f:f, cal:batCal()}; }
+    function prefsPush(){ if(!user||!db||!prefsReady) return; var p=prefsNow(), js=JSON.stringify(p); if(js===prefsLast) return; prefsLast=js;
+      var t=Date.now(); try{ localStorage.setItem('fimapaPrefsT',String(t)); }catch(e){}
+      db.collection('settings').doc(user.uid).set({prefs:js, saved:t}).catch(err); }
+    function prefsPull(){ prefsReady=false;
+      db.collection('settings').doc(user.uid).get().then(function(d){
+        var loc=+(localStorage.getItem('fimapaPrefsT')||0), x=d.exists?d.data():null;
+        if(x && x.prefs && (x.saved||0)>loc){ try{ var p=JSON.parse(x.prefs);
+            if(p.cal){ localStorage.setItem('fimiBatCal',JSON.stringify(p.cal)); } calUI();
+            Object.keys(p.f||{}).forEach(function(k){ if($(k) && PREFS.indexOf(k)>=0){ if(k==='bat' && p.f[k]==='cal' && !batCal()) return; $(k).value=p.f[k]; } });
+            applyCam(); localStorage.setItem('fimapaPrefsT',String(x.saved)); prefsLast=JSON.stringify(prefsNow()); prefsReady=true; compute(); syncPreset(); return; }catch(e){} }
+        prefsReady=true; prefsPush();
+      }).catch(function(e){ prefsReady=true; err(e); }); }
     function mergeOwned(snap){
       var p=projs(), changed=false, cloud={};
       snap.forEach(function(d){ var x=d.data(); if(!x||!x.name) return; cloud[x.name]=x; var loc=p[x.name];
@@ -843,7 +860,18 @@ if (typeof module!=='undefined') module.exports=Core;
     function gmsg(t,denied){ $('gMsg').innerHTML=t; $('gOther').style.display=denied?'inline-block':'none'; $('gLogin').style.display=denied?'none':'inline-flex'; }
     function userBox(){ var b=$('userBox'); document.documentElement.classList.toggle('logged',!!user); if(!user){ b.style.display='none'; return; } b.style.display='flex';
       $('userName').textContent=(user.displayName||user.email||'').split(' ')[0]; var pic=$('userPic'); if(user.photoURL){ pic.src=user.photoURL; pic.style.display='block'; } else pic.style.display='none'; }
-    function logout(){ confirmBox('Sair da conta '+escH((user&&user.email)||'')+'? Os projetos continuam salvos neste aparelho.','Cancelar','Sair').then(function(y){ if(y) auth.signOut(); }); }
+    function logout(){
+      var on=navigator.onLine;
+      var msg=on ? 'Sair da conta '+escH((user&&user.email)||'')+'? Os projetos continuam na nuvem e serão removidos deste aparelho.'
+                 : 'Sair da conta '+escH((user&&user.email)||'')+'? Sem internet agora: os projetos ficam neste aparelho até você entrar de novo.';
+      confirmBox(msg,'Cancelar','Sair').then(function(y){ if(!y) return;
+        var done=function(){ auth.signOut(); };
+        if(!on) return done();
+        clearTimeout(prefsT); prefsPush();
+        Promise.race([db.waitForPendingWrites(), new Promise(function(r){ setTimeout(r,8000); })]).then(function(){
+          try{ localStorage.removeItem(PKEY); localStorage.removeItem('fimapaUltimo'); localStorage.removeItem(KEY); localStorage.removeItem('fimiGrade2'); localStorage.removeItem('fimapaPrefsT'); }catch(e){}
+          poly=[]; fixed=null; home=null; gcps=[]; $('name').value=''; redraw(); projList(''); resumeUI(); done(); });
+      }); }
     function onUser(u){
       if(u && ALLOWED.indexOf((u.email||'').toLowerCase())<0){
         var em=u.email||''; user=null; unsubs.forEach(function(f){ f(); }); unsubs=[]; sharedMap={}; ui(); userBox();
@@ -855,6 +883,7 @@ if (typeof module!=='undefined') module.exports=Core;
       gate(!u); if(!u && $('gOther').style.display!=='inline-block') gmsg('Acesso restrito à equipe do Fimapa.');
       if(!u){ projList($('projSel').value); return; }
       unsubs.push(db.collection(COL).where('owner','==',u.uid).onSnapshot({includeMetadataChanges:false}, mergeOwned, err));
+      prefsPull();
       if(email()) unsubs.push(db.collection(COL).where('members','array-contains',email()).onSnapshot(function(snap){
         sharedMap={}; snap.forEach(function(d){ var x=d.data(); if(x.owner!==u.uid && !x.deleted){ try{ sharedMap[d.id]={name:x.name, by:x.ownerName||x.ownerEmail, saved:x.saved, st:JSON.parse(x.st)}; }catch(e){} } });
         projList($('projSel').value); }, err));
@@ -901,6 +930,7 @@ if (typeof module!=='undefined') module.exports=Core;
     }
     return {
       init:init,
+      prefsTouch:function(){ if(!user||!prefsReady) return; clearTimeout(prefsT); prefsT=setTimeout(prefsPush,2500); },
       saved:function(n){ if(user){ var p=projs(); push(n,p[n]); } },
       deleted:function(n){ if(user&&db) db.collection(COL).doc(docId(n)).set({owner:user.uid, name:n, deleted:true, saved:Date.now(), st:'', members:[]},{merge:true}).catch(err); },
       shared:function(id){ return sharedMap[id]||null; },
@@ -1122,13 +1152,29 @@ if (typeof module!=='undefined') module.exports=Core;
   syncPreset();
 
   calUI(); projList(''); Cloud.init();
+  // Abre sempre limpo: a sessão anterior vira "último trabalho" (botão Retomar); ajustes e preferências continuam.
+  var LASTKEY='fimapaUltimo';
   var saved=null; try{ saved=JSON.parse(localStorage.getItem(KEY)||'null'); }catch(e){}
-  if(saved) load(saved,false);
-  else { var old=null; try{ old=JSON.parse(localStorage.getItem('fimiGrade2')||'null'); }catch(e){} if(old) load(old,true); }
-  $('name').value=baseName($('name').value);
+  if(!saved){ try{ saved=JSON.parse(localStorage.getItem('fimiGrade2')||'null'); }catch(e){} }
+  if(saved){
+    if((saved.poly&&saved.poly.length) || (saved.fixed&&saved.fixed.length)){ try{ saved.when=Date.now(); localStorage.setItem(LASTKEY,JSON.stringify(saved)); }catch(e){} }
+    load(saved,false); poly=[]; fixed=null; home=null; gcps=[];
+  }
+  $('name').value='';
+  function lastWork(){ try{ return JSON.parse(localStorage.getItem(LASTKEY)||'null'); }catch(e){ return null; } }
+  function resumeUI(){ var l=lastWork(), empty=!poly.length && !(fixed&&fixed.length);
+    var nm=l&&l.f&&l.f.name ? baseName(l.f.name) : '';
+    var lbl='↩ Retomar último trabalho'+(nm?': '+nm:'');
+    $('bResume2').style.display=l?'':'none'; $('bResume2').textContent=lbl;
+    $('bResume').style.display=(l&&empty)?'':'none'; $('bResume').textContent=lbl; }
+  function resume(){ var l=lastWork(); if(!l) return toast('Nenhum trabalho anterior');
+    var go=function(){ load(l,false); redraw(); fit(); resumeUI(); toast('Último trabalho retomado'+(l.f&&l.f.name?': '+baseName(l.f.name):'')); };
+    if(poly.length || (fixed&&fixed.length)) confirmBox('Substituir a área atual pelo último trabalho?','Cancelar','Retomar').then(function(y){ if(y) go(); }); else go(); }
+  $('bResume').onclick=resume; $('bResume2').onclick=resume;
+  map.on('click',function(){ setTimeout(resumeUI,0); });
   applyCam();
   if(poly.length||fixed) fit(); else locate(!home);
-  redraw();
+  redraw(); resumeUI();
   var okTile=false; [sat,clar,osm].forEach(function(l){ l.on('tileload',function(){ okTile=true; $('nomap').style.display='none'; }); });
   function netState(){ var off=!navigator.onLine; $('net').style.display=off?'':'none';
     if(off && !okTile){ $('nomap').textContent='Sem internet e sem mapa salvo aqui. Dá para marcar mesmo assim, ou use + Canto no GPS caminhando até cada canto.'; $('nomap').style.display='block'; } }

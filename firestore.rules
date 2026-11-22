@@ -17,5 +17,9 @@ service cloud.firestore {
                     && request.resource.data.owner == request.auth.uid;
       allow delete: if permitido() && resource.data.owner == request.auth.uid;
     }
+    // Preferências de cada usuário (câmera, sobreposição, bateria, calibração)
+    match /settings/{uid} {
+      allow read, write: if permitido() && request.auth.uid == uid;
+    }
   }
 }
