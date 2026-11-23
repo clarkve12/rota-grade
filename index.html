@@ -127,6 +127,13 @@ html.gated #gate{display:flex}html.gated body{overflow:hidden}
 @media (max-width:560px){html.logged #hsub{display:none}}
 #userBox b{white-space:nowrap}
 #bLogout{min-height:0;padding:4px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.35);background:transparent;color:#fff;font-size:12.5px;font-weight:600}
+.pinfo{font-size:13px;line-height:1.35;min-width:230px;max-width:290px}.pinfo h4{margin:0 0 6px;font-size:14.5px}
+.pinfo table{border-collapse:collapse;width:100%}.pinfo td{padding:3px 0;vertical-align:top;border-top:1px solid #e6ebf2}.pinfo td:first-child{color:#55678a;padding-right:8px;white-space:nowrap}
+.pinfo td:last-child{word-break:break-word}.pinfo .pact{display:flex;gap:6px;margin-top:8px}.pinfo .pact button,.pinfo .pact a{flex:1;min-height:34px;font-size:12.5px;padding:4px 6px;border-radius:8px;text-align:center;text-decoration:none;display:flex;align-items:center;justify-content:center}
+#pSheet{position:fixed;left:0;right:0;bottom:0;z-index:3000;display:flex;justify-content:center;pointer-events:none}
+.psh{pointer-events:auto;background:var(--card);color:var(--ink);width:100%;max-width:560px;max-height:62vh;overflow:auto;border-radius:18px 18px 0 0;box-shadow:0 -6px 24px rgba(0,0,0,.3);padding:16px 16px calc(16px + env(safe-area-inset-bottom));position:relative}
+#pClose{position:absolute;top:10px;right:10px;min-height:0;width:34px;height:34px;border-radius:50%;padding:0;font-size:16px}
+#pSheet .pinfo{max-width:none;font-size:14px}#pSheet .pinfo h4{padding-right:40px;font-size:16px}#pSheet .pinfo td{border-top:1px solid var(--line)}#pSheet .pinfo td:first-child{color:var(--mut)}
 </style>
 </head>
 <body>
@@ -162,6 +169,7 @@ html.gated #gate{display:flex}html.gated body{overflow:hidden}
   <div class="tools">
     <button id="bArea" class="on">Área</button>
     <button id="bHome">Marcar H</button>
+    <button id="bInfo">ⓘ Parcela</button>
     <button id="bUndo">Desfazer</button>
     <button id="bClear">Limpar</button>
     <button id="bGps">Onde estou</button>
@@ -169,6 +177,7 @@ html.gated #gate{display:flex}html.gated body{overflow:hidden}
   </div>
 </div>
 
+<div id="pSheet" style="display:none"><div class="psh"><button id="pClose" aria-label="Fechar">✕</button><div id="pBody"></div></div></div>
 <main>
   <section class="card">
     <div class="grid">
@@ -531,9 +540,10 @@ if (typeof module!=='undefined') module.exports=Core;
   function passLabelLong(p){ return 'Direção '+(p.pass+1)+' – '+PASS_NAMES[p.pass]+' ('+compassAxis(p.ang||0).replace('NS','Norte–Sul').replace('LO','Leste–Oeste').replace('NE-SO','Nordeste–Sudoeste').replace('NO-SE','Noroeste–Sudeste')+')'; }
   var stamp=null, stampSig='';
   function fmtMin(s){ return Math.ceil(s/60)+' min'; }
-  function setMode(m){ mode=m; $('bArea').classList.toggle('on',m==='area'); $('bHome').classList.toggle('on',m==='home');
+  function setMode(m){ mode=m; $('bArea').classList.toggle('on',m==='area'); $('bHome').classList.toggle('on',m==='home'); $('bInfo').classList.toggle('on',m==='info');
+    if(m==='info' && !map.hasLayer(sigefWms)) sigefWms.addTo(map);
     $('bArea').textContent = fixed ? 'Pontos' : 'Área';
-    $('hint').textContent = m==='home' ? 'Toque onde o drone vai decolar · segure para a lupa' : (fixed ? 'Toque para adicionar ponto · segure para usar a lupa' : 'Toque para marcar um canto · segure para usar a lupa'); syncFsInfo(); }
+    $('hint').textContent = m==='info' ? 'Toque numa parcela para ver os dados do SIGEF · toque em Área para voltar a marcar' : m==='home' ? 'Toque onde o drone vai decolar · segure para a lupa' : (fixed ? 'Toque para adicionar ponto · segure para usar a lupa' : 'Toque para marcar um canto · segure para usar a lupa'); syncFsInfo(); }
   function syncFsInfo(){ var f=$('fsInfo'); if(!f) return; var b=f.querySelector('b'); f.innerHTML=(b?b.outerHTML+'<br>':'')+$('hint').textContent; }
   function applyCam(){ var c=CAMS[$('cam').value]; ['hfov','vfov','imgw'].forEach(function(k){ $(k).disabled=!!c; if(c) $(k).value=c[k]; }); }
   function opts(){ var n=function(id){return parseFloat($(id).value);};
@@ -862,7 +872,42 @@ if (typeof module!=='undefined') module.exports=Core;
       }).catch(function(e){ if(my!==seq) return; lastKey=''; clearLayer();
         box('🛰️ <b>SIGEF:</b> não foi possível consultar o GeoPortal do INCRA agora ('+escH(e.message||'erro')+'). Ative a camada “Parcelas SIGEF (INCRA)” para conferir visualmente.'); });
     }
-    return { schedule:function(){ clearTimeout(T); T=setTimeout(check,1200); }, check:check };
+
+    // Consulta da parcela tocada no mapa (mesmos dados do GeoPortal do INCRA)
+    var hiLayer=null, munCache={};
+    function fmtDate(s){ if(!s) return ''; var d=new Date(s); return isNaN(d) ? escH(s) : d.toLocaleDateString('pt-BR')+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); }
+    function municipio(id){ if(!id) return Promise.resolve('');
+      if(munCache[id]) return Promise.resolve(munCache[id]);
+      return fetch('https://servicodados.ibge.gov.br/api/v1/localidades/municipios/'+id).then(function(r){ return r.json(); })
+        .then(function(m){ var uf=m && m.microrregiao && m.microrregiao.mesorregiao && m.microrregiao.mesorregiao.UF ? m.microrregiao.mesorregiao.UF.sigla : ''; var n=(m&&m.nome?m.nome+(uf?' – '+uf:''):String(id)); munCache[id]=n; return n; })
+        .catch(function(){ return String(id); }); }
+    function info(p){
+      if(!navigator.onLine) return toast('Sem internet: a consulta ao SIGEF precisa de conexão');
+      var d=0.00002, url=WFS+'?service=WFS&version=1.0.0&request=GetFeature&typeName=geonode:sigef_geo&maxFeatures=20&outputFormat=application/json&srsName=EPSG:4326&bbox='+[p.lon-d,p.lat-d,p.lon+d,p.lat+d].map(function(v){return v.toFixed(7);}).join(',');
+      var pop={setContent:function(h){ $('pBody').innerHTML=h; $('pSheet').style.display='flex'; }}; pop.setContent('<div class="pinfo">Consultando o SIGEF…</div>');
+      fetch(url).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }).then(function(fc){
+        var fs=(fc.features||[]).filter(function(f){ return inPolys(p.lon,p.lat,rings(f.geometry||{})); });
+        if(hiLayer){ map.removeLayer(hiLayer); hiLayer=null; }
+        if(!fs.length){ pop.setContent('<div class="pinfo">Nenhuma parcela certificada no SIGEF neste ponto.</div>'); return; }
+        var f=fs[0], a=f.properties||{};
+        hiLayer=L.geoJSON(f,{style:{color:'#ffd21f',weight:3,fillColor:'#ffd21f',fillOpacity:.12},interactive:false}).addTo(map);
+        municipio(a.municipio_id).then(function(mun){
+          var rows=[['Denominação',escH((a.nome_area||'').trim())],['Status',escH(a.status||'')],['Natureza',escH(a.natureza||'')],
+            ['Situação',escH(a.situacao_informada||'')],['Área',a.area_hectares!=null?(+a.area_hectares).toFixed(4).replace('.',',')+' ha':''],
+            ['Município',escH(mun)],['Código da parcela','<span style="font-family:monospace;font-size:11.5px">'+escH(a.parcela_codigo||'')+'</span>'],
+            ['Código do imóvel (SNCR)',escH(a.codigo_imovel||'')],['Matrícula',escH(a.registro_matricula||'')],['Transcrição',escH(a.transcricao||'')],
+            ['CNS do cartório',escH(a.registro_cns||'')],['Data do registro',fmtDate(a.data_registro)],['Submissão',fmtDate(a.data_submissao)],
+            ['Aprovação',fmtDate(a.data_aprovacao)],['RT (credenciamento)',escH(a.rt||'')],['Tipo de envio',escH(a.tipo_envio||'')]]
+            .filter(function(r){ return r[1]; });
+          pop.setContent('<div class="pinfo"><h4>'+escH((a.nome_area||'Parcela SIGEF').trim())+'</h4><table>'+rows.map(function(r){ return '<tr><td>'+r[0]+'</td><td>'+r[1]+'</td></tr>'; }).join('')+'</table>'+
+            (fs.length>1?'<div style="margin-top:6px;color:#b42318">Há '+fs.length+' parcelas sobrepostas neste ponto; mostrando a primeira.</div>':'')+
+            '<div class="pact"><button class="sec" id="pCopy">Copiar código</button><a class="sec" href="https://sigef.incra.gov.br/consultar/parcelas/" target="_blank" rel="noopener">Consultar no SIGEF</a></div></div>');
+          var b=document.getElementById('pCopy'); if(b) b.onclick=function(){ var c=a.parcela_codigo||''; (navigator.clipboard?navigator.clipboard.writeText(c):Promise.reject()).then(function(){ toast('Código da parcela copiado'); },function(){ prompt('Código da parcela:',c); }); };
+        });
+      }).catch(function(e){ pop.setContent('<div class="pinfo">Não foi possível consultar o SIGEF agora ('+escH(e.message||'erro')+').</div>'); });
+    }
+    $('pClose').onclick=function(){ $('pSheet').style.display='none'; if(hiLayer){ map.removeLayer(hiLayer); hiLayer=null; } };
+    return { schedule:function(){ clearTimeout(T); T=setTimeout(check,1200); }, check:check, info:info };
   })();
   window.addEventListener('online',function(){ Sigef.schedule(); });
 
@@ -1148,7 +1193,7 @@ if (typeof module!=='undefined') module.exports=Core;
     download(nm+'.kml', Core.fimiKml(nm,wps,o,d,JSON.stringify(state()))); });
   $('bGE').onclick=function(){ if(!last||!last.wps.length) return toast('Desenhe a área primeiro');
     download(fname()+'_GoogleEarth.kml', Core.stdKml(fname(),fixed?hull(fixed):poly,last.wps,home,opts().alt)); };
-  function addAt(p){ if(mode==='home'){ home=p; setMode('area'); } else if(fixed){ fixed.push(p); } else { poly.push(p); } redraw(); }
+  function addAt(p){ if(mode==='info'){ Sigef.info(p); return; } if(mode==='home'){ home=p; setMode('area'); } else if(fixed){ fixed.push(p); } else { poly.push(p); } redraw(); }
   var suppressClick=false;
   map.on('click',function(e){ if(suppressClick || Sim.active()) return; addAt({lat:e.latlng.lat,lon:e.latlng.lng}); });
   // Segurar o dedo ~0,45 s: lupa aparece, desliza até o ponto e solta para marcar.
@@ -1167,7 +1212,7 @@ if (typeof module!=='undefined') module.exports=Core;
       e.stopImmediatePropagation(); var ll=llAt(e); cancel(); suppressClick=true; setTimeout(function(){suppressClick=false;},500); addAt({lat:ll.lat,lon:ll.lng}); },true);
     window.addEventListener('pointercancel',function(){ lp.ptrs=Math.max(0,lp.ptrs-1); cancel(); },true);
   })();
-  $('bArea').onclick=function(){setMode('area');}; $('bHome').onclick=function(){setMode('home');};
+  $('bArea').onclick=function(){setMode('area');}; $('bHome').onclick=function(){setMode('home');}; $('bInfo').onclick=function(){ setMode(mode==='info'?'area':'info'); };
   $('bUndo').onclick=function(){ (fixed||poly).pop(); redraw(); };
   $('bClear').onclick=function(){ poly=[]; fixed=null; redraw(); };
   $('bGps').onclick=function(){ locate(true); };
