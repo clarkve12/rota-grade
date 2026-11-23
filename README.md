@@ -12,6 +12,7 @@ Site: https://clarkve12.github.io/rota-grade/
 - **Predefinições de ortofoto** (30 m · 2,5 m/s, 40 m · 3 m/s, 50 m · 4 m/s, 60 m · 5 m/s) e barra de altura de 40 a 60 m com velocidade automática
 - Cálculo de **resolução (GSD)**, arrasto da imagem e **intervalo de disparo da câmera**
 - **Relevo**: análise e compensação de altura pelo terreno
+- **Sobreposição com o SIGEF**: ao desenhar a poligonal, consulta o GeoPortal do INCRA e avisa se a área sobrepõe ou encosta em parcelas certificadas (nome, área, matrícula, CNS, código SNCR), além da camada “Parcelas SIGEF (INCRA)” no mapa
 - **Pontos de controle (GCP)** distribuídos na área, com coordenadas UTM, para alvos e checkpoints no RTK
 - **Simulador de voo** no mapa
 - **Relatório em PDF** com croqui, ficha do operador e lista de baterias
@@ -29,4 +30,5 @@ O intervalo de disparo da câmera não vai no KML: ajuste na câmera conforme in
 - Imagens de satélite: Esri World Imagery e Esri Clarity
 - Mapa de ruas: OpenStreetMap
 - Relevo: Terrain Tiles (AWS / Mapzen)
+- Parcelas certificadas: GeoPortal do INCRA (WMS/WFS, camada pública geonode:sigef_geo)
 - Biblioteca de mapas: Leaflet

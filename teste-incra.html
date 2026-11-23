@@ -1,4 +1,0 @@
-<!DOCTYPE html><html><head><meta charset="utf-8"><title>teste</title></head><body><pre id="o">testando…</pre><script>
-var u='https://geoportal.incra.gov.br/geoserver/wfs?service=WFS&version=1.0.0&request=GetFeature&typeName=geonode:sigef_geo&maxFeatures=1&outputFormat=application/json&srsName=EPSG:4326&bbox=-41.9,-16.1,-41.1,-15.4';
-fetch(u).then(function(r){return r.text();}).then(function(t){document.getElementById('o').textContent='CORS OK: '+t.slice(0,200);}).catch(function(e){document.getElementById('o').textContent='BLOQUEADO: '+e;});
-</script></body></html>
