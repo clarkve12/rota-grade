@@ -6,7 +6,7 @@ service cloud.firestore {
     function permitido() {
       return request.auth != null
         && request.auth.token.email_verified == true
-        && request.auth.token.email.lower() in ['clessiavs@gmail.com', 'infonewsav@gmail.com'];
+        && request.auth.token.email.lower() in ['clessiavs@gmail.com', 'infonewsav@gmail.com', 'kaikke45@gmail.com'];
     }
     match /projects/{id} {
       allow read: if permitido() && (

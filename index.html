@@ -855,7 +855,7 @@ if (typeof module!=='undefined') module.exports=Core;
       if(changed){ try{ localStorage.setItem(PKEY,JSON.stringify(p)); }catch(e){} }
       projList($('projSel').value);
     }
-    var ALLOWED=['clessiavs@gmail.com','infonewsav@gmail.com'];   // contas com acesso ao Fimapa
+    var ALLOWED=['clessiavs@gmail.com','infonewsav@gmail.com','kaikke45@gmail.com'];   // contas com acesso ao Fimapa
     function gate(on){ document.documentElement.classList.toggle('gated',!!on); if(!on) setTimeout(function(){ map.invalidateSize(); },60); }
     function gmsg(t,denied){ $('gMsg').innerHTML=t; $('gOther').style.display=denied?'inline-block':'none'; $('gLogin').style.display=denied?'none':'inline-flex'; }
     function userBox(){ var b=$('userBox'); document.documentElement.classList.toggle('logged',!!user); if(!user){ b.style.display='none'; return; } b.style.display='flex';
