@@ -281,8 +281,6 @@ html.gated #gate{display:flex}html.gated body{overflow:hidden}
           <label>FOV horizontal (°)<input id="hfov" type="number" value="68.4" inputmode="decimal"></label>
           <label>FOV vertical (°)<input id="vfov" type="number" value="54" inputmode="decimal"></label>
           <label class="full">Largura da foto (px)<input id="imgw" type="number" value="8064" inputmode="numeric"></label>
-          <label>Gimbal nos pontos<select id="gimbal"><option value="-9000">−90° (para baixo)</option><option value="-7500">−75°</option><option value="-6000">−60°</option><option value="0">Não definir (0°, padrão do app)</option></select></label>
-          <label>Gimbal nas direções extras<select id="gimbalX"><option value="same">Igual</option><option value="-6500">−65° (melhor para 3D)</option></select></label>
         </div>
       </div>
       <div>
@@ -336,8 +334,8 @@ html.gated #gate{display:flex}html.gated body{overflow:hidden}
       <li>Marque os cantos da área, ajuste altura e velocidade e baixe o KML. Se a área precisar de mais de uma bateria, baixe uma parte para cada bateria e voe na ordem.</li>
       <li>No app: Voo inteligente → Ponto de referência → História → <b>Importar rotas</b> → pasta Download. A rota aparece em <b>Favorito</b>.</li>
       <li>Conecte o drone, espere o GPS fixar e abra a rota. Confira os pontos antes de executar.</li>
-      <li>No modo intervalo: gimbal em −90° e foto por intervalo com o tempo indicado.</li>
-      <li>Voo cruzado: faça todas as baterias de uma direção e depois as da outra. Para ortomosaico mantenha o gimbal em −90°; para modelo 3D e fachadas, −60° a −70° nas direções cruzadas ajuda bastante.</li>
+      <li>Antes de iniciar, incline a câmera manualmente para −90° (o FIMI Navi não aplica o ângulo da rota) e ligue a foto por intervalo com o tempo indicado.</li>
+      <li>Voo cruzado: faça todas as baterias de uma direção e depois as da outra. Para ortomosaico mantenha a câmera em −90°; para modelo 3D e fachadas, inclinar manualmente para −60° a −70° nas direções cruzadas ajuda bastante.</li>
       <li>Para editar depois, toque em <b>Abrir KML para editar</b> e escolha um KML gerado aqui: área e ajustes voltam como estavam.</li>
     </ol></div>
   </details>
@@ -483,7 +481,7 @@ if (typeof module!=='undefined') module.exports=Core;
 {
   if(typeof L==='undefined'){ document.getElementById('nomap').textContent='A biblioteca do mapa não carregou. Verifique a internet e recarregue a página.'; document.getElementById('nomap').style.display='flex'; throw new Error('Leaflet ausente'); }
   var $ = function(id){ return document.getElementById(id); };
-  var FIELDS=['name','alt','spd','passes','join','gimbal','gimbalX','terrain','gcpN','photo','side','front','spacing','margin','ang','cam','hfov','vfov','imgw','end','lost','yaw','maptype','bat','reserve'];
+  var FIELDS=['name','alt','spd','passes','join','terrain','gcpN','photo','side','front','spacing','margin','ang','cam','hfov','vfov','imgw','end','lost','yaw','maptype','bat','reserve'];
   var CAMS={telemax:{hfov:68.4,vfov:54,imgw:8064}};
   var MAXD=1000, MIN_INT=2, KEY='fimiGrade3';
   // poly: cantos da área (modo grade). fixed: pontos importados de um KML do FIMI (modo pontos), ou null.
@@ -550,7 +548,7 @@ if (typeof module!=='undefined') module.exports=Core;
     return { alt:Math.min(120,Math.max(10,n('alt')||30)), speed:Math.min(10,Math.max(1,n('spd')||3)), hfov:n('hfov')||68.4, vfov:n('vfov')||54, imgw:n('imgw')||8064,
       side:isNaN(n('side'))?70:n('side'), front:isNaN(n('front'))?75:n('front'), spacing:n('spacing')||0, margin:($('margin').value.trim()===''||isNaN(n('margin')))?-1:Math.max(0,n('margin')), photo:$('photo').value,
       bearing:parseInt($('ang').value,10), home:home, maxd:MAXD, yaw:+$('yaw').value, end:+$('end').value, lost:+$('lost').value, maptype:+$('maptype').value,
-      gimbal:+$('gimbal').value||0, batMin:($('bat').value==='cal'&&batCal())?batCal().min:(n('bat')||29), reserve:Math.min(60,Math.max(10,isNaN(n('reserve'))?30:n('reserve'))) }; }
+      gimbal:0, batMin:($('bat').value==='cal'&&batCal())?batCal().min:(n('bat')||29), reserve:Math.min(60,Math.max(10,isNaN(n('reserve'))?30:n('reserve'))) }; }
   function fieldVals(){ return FIELDS.reduce(function(a,k){a[k]=$(k).value;return a;},{}); }
   function state(){ return {v:2, poly:poly, fixed:fixed, home:home, gcps:gcps, f:fieldVals()}; }
   function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state())); }catch(e){} if(typeof resumeUI==='function') resumeUI(); if(typeof Cloud!=='undefined' && Cloud) Cloud.prefsTouch(); }
@@ -614,7 +612,7 @@ if (typeof module!=='undefined') module.exports=Core;
     if(r.wps.length && !fixed){
       tips = r.lines+' faixas a cada '+r.spacing.toFixed(0)+' m · resolução ≈ '+r.gsd.toFixed(1)+' cm/px · ';
       tips += o.photo==='wp' ? 'foto em cada ponto' : 'foto por intervalo a cada <b>'+Math.max(0.5,Math.floor(r.interval*2)/2)+' s</b>';
-      tips += ' · margem '+Math.round(r.margin)+' m'+(o.gimbal?' · gimbal '+(o.gimbal/100)+'° automático':'');
+      tips += ' · margem '+Math.round(r.margin)+' m'+' · câmera em −90° (manual)';
       if(o.photo==='interval' && r.interval<MIN_INT) w.push('Intervalo de foto abaixo de '+MIN_INT+' s. Reduza a velocidade para '+Math.floor(r.photoDist/MIN_INT*2)/2+' m/s ou suba a altura.');
     }
     if(npass>1 && parts.length) tips += '<br>Direções: '+angles.map(function(a,i){return (i+1)+'ª '+Math.round(a)+'°';}).join(' · ')+(joined?' em sequência, numa rota contínua.':' (tracejado = direções extras).');
@@ -916,7 +914,7 @@ if (typeof module!=='undefined') module.exports=Core;
   var Cloud=(function(){
     var cfg=(typeof firebaseConfig!=='undefined' && firebaseConfig && firebaseConfig.apiKey) ? firebaseConfig : null;
     var db=null, auth=null, user=null, sharedMap={}, unsubs=[], ready=false, prefsT=null, prefsLast='', prefsReady=false;
-    var PREFS=['passes','join','gimbal','gimbalX','terrain','gcpN','photo','side','front','cam','hfov','vfov','imgw','end','lost','yaw','maptype','bat','reserve'];
+    var PREFS=['passes','join','terrain','gcpN','photo','side','front','cam','hfov','vfov','imgw','end','lost','yaw','maptype','bat','reserve'];
     var COL='projects';
     function st(t){ $('cloudStatus').innerHTML=t; }
     function email(){ return ((user&&user.email)||'').toLowerCase(); }
@@ -1068,7 +1066,7 @@ if (typeof module!=='undefined') module.exports=Core;
       if(home){ var a=P(home); g.fillStyle='#ff6a1f'; g.strokeStyle='#fff'; g.lineWidth=2; g.fillRect(a[0]-13,a[1]-13,26,26); g.strokeRect(a[0]-13,a[1]-13,26,26); g.fillStyle='#fff'; g.font='bold 15px sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText('H',a[0],a[1]+1); }
       try{ return cv.toDataURL('image/jpeg',0.85); }catch(e){ return null; } }); }
   function reportHtml(img){ var c=lastCalc, o=c.o, r=c.r, f=function(x,d){ return Number(x).toLocaleString('pt-BR',{minimumFractionDigits:d||0,maximumFractionDigits:d||0}); };
-    var name=baseName($('name').value)||'Área', now=new Date(), gx=$('gimbalX').value, rows=[];
+    var name=baseName($('name').value)||'Área', now=new Date(), rows=[];
     var add=function(k,v){ rows.push('<tr><th>'+k+'</th><td>'+v+'</td></tr>'); };
     var perim=0, sh=fixed?[]:poly; for(var i=0;i<sh.length;i++) perim+=Core.hav(sh[i],sh[(i+1)%sh.length]);
     if(!fixed){ add('Área', f(r.area/10000,2)+' ha'); add('Perímetro', f(perim)+' m'); }
@@ -1078,7 +1076,7 @@ if (typeof module!=='undefined') module.exports=Core;
       add('Direções', c.npass===1?'Uma ('+Math.round(r.bearing)+'°)':c.angles.map(function(a){return Math.round(a)+'°';}).join(', ')+(c.joined?' — rota contínua':' — separadas por direção'));
       add('Fotos', o.photo==='wp'?'Uma foto em cada waypoint':'Intervalo da câmera a cada <b>'+f(Math.max(0.5,Math.floor(r.interval*2)/2),1)+' s</b>'); }
     add('Velocidade', f(o.speed,1)+' m/s');
-    add('Gimbal', o.gimbal? (o.gimbal/100)+'° definido automaticamente em cada ponto'+(c.npass>1&&gx!=='same'?' ('+(+gx/100)+'° nas direções extras)':'') : 'não definido pela rota (ajustar manualmente)');
+    add('Gimbal', 'Ajustar manualmente para −90° antes de iniciar (o FIMI Navi não aplica o ângulo da rota)');
     add('Baterias', c.parts.length+' · tempo total estimado '+fmtMin(c.total)+' · '+c.totPts+' waypoints');
     add('Ao terminar / perda de sinal', ($('end').value==='4'?'Volta para casa':'Paira')+' / '+($('lost').value==='0'?'sai da missão (o drone executa o retorno de segurança)':'continua a missão'));
     if(home) add('Decolagem (H)', home.lat.toFixed(7)+', '+home.lon.toFixed(7));
@@ -1089,7 +1087,7 @@ if (typeof module!=='undefined') module.exports=Core;
     var steps=['Bateria carregada e hélices em bom estado; cartão de memória com espaço.',
       'Ligue o drone no ponto H e espere o GPS fixar (ponto de retorno atualizado no app).',
       'No FIMI Navi: Voo inteligente → Ponto de referência → História → aba <b>Favorito</b> → abra a rota da bateria da vez e confira os pontos no mapa.',
-      o.gimbal ? 'Gimbal: a rota define '+(o.gimbal/100)+'° em cada ponto. Na primeira bateria, confira se a câmera apontou como esperado.' : 'Gimbal: aponte a câmera para '+(o.photo==='interval'?'−90°':'a inclinação desejada')+' antes de iniciar.',
+      'Gimbal: aponte a câmera para '+(o.photo==='interval'?'−90°':'a inclinação desejada')+' antes de iniciar.',
       interval ? 'Câmera em <b>foto por intervalo de '+interval+'</b>; inicie as fotos ao começar a rota e pare ao terminar.' : 'Fotos: o drone fotografa em cada waypoint automaticamente.',
       'Execute a rota e mantenha o drone sempre à vista. Vento forte, chuva ou alerta de bateria: pause e traga o drone de volta.',
       'Ao pousar, troque a bateria e abra a próxima rota da lista (cada uma começa onde a anterior terminou).',
@@ -1186,8 +1184,8 @@ if (typeof module!=='undefined') module.exports=Core;
   $('simClose').onclick=function(){ Sim.close(); };
   $('simRange').addEventListener('input',function(){ Sim.seek(+this.value); });
   $('parts').addEventListener('click',function(e){ var b=e.target.closest('button[data-part]'); if(!b) return;
-    var i=+b.dataset.part, o=opts(), d=0, gx=$('gimbalX').value;
-    var wps=parts[i].wps.map(function(q){ return {lat:q.lat, lon:q.lon, alt:q.alt, gp:(q.pass>0 && gx!=='same') ? +gx : o.gimbal}; });
+    var i=+b.dataset.part, o=opts(), d=0;
+    var wps=parts[i].wps.map(function(q){ return {lat:q.lat, lon:q.lon, alt:q.alt, gp:0}; });
     for(var z=1;z<wps.length;z++) d+=Core.hav(wps[z-1],wps[z]);
     var nm=partName(i);
     download(nm+'.kml', Core.fimiKml(nm,wps,o,d,JSON.stringify(state()))); });
