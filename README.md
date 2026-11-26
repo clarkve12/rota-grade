@@ -24,7 +24,7 @@ Nome no formato `Projeto_Direção_Altura-Velocidade_Bateria_Data.kml`, por exem
 `Fazenda_Sul_D2-Cruzada-NS_30m-2,5ms_bat3de8_21-11.kml`
 
 Os arquivos são importados no FIMI Navi (versão modificada, com importação de KML em lote e opções de exportar/apagar rotas).
-O intervalo de disparo da câmera não vai no KML: ajuste na câmera conforme indicado no Fimapa.
+O intervalo de disparo e a inclinação do gimbal não vão no KML (o drone não aplica o ângulo da rota): incline a câmera para −90° manualmente e, no FIMI Navi, ligue “Foto com lapso de tempo” na opção indicada pelo Fimapa (o app oferece 2, 5, 10, 30 e 60 s).
 
 ## Serviços externos usados (gratuitos, sem chave)
 - Imagens de satélite: Esri World Imagery e Esri Clarity
